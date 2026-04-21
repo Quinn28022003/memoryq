@@ -28,7 +28,7 @@ Important fields:
 
 ## Reflect Command
 
-After the task is complete, the agent writes a short result file:
+After the task is complete, the agent **MUST** write a short result file (this is mandatory):
 
 ```bash
 mkdir -p .memoryq
@@ -48,14 +48,14 @@ The file should include:
 Then the agent runs:
 
 ```bash
-memoryq reflect --run-id "<runId>" --result-file ".memoryq/last-result.md"
+memoryq reflect --run-id "<runId>" --result-file ".memoryq/last-result.md" && rm .memoryq/last-result.md
 ```
 
 `reflect` asks Groq whether the result contains reusable memory. If `shouldPersist` is true, MemoryQ first checks candidate lessons and knowledge against existing `memory_embeddings` with a high-similarity semantic dedupe pass. This prevents the same issue or knowledge from being saved again just because it was worded differently.
 
 After dedupe, MemoryQ stores only genuinely new lessons and knowledge, asks Groq to split memory into scene-based chunks, embeds each scene with Groq embeddings, and writes those chunks to Supabase `memory_embeddings` with `owner_type`, `owner_id`, `source_type`, `source_id`, and `chunk_index`.
 
-Agents must always run `reflect`; the model decides whether memory is worth saving.
+Agents must always run `reflect`; the model decides whether memory is worth saving. Ensure `.memoryq/last-result.md` is deleted even if reflection fails.
 
 ## Using MemoryQ In Another Project
 

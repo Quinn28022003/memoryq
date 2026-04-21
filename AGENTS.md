@@ -34,7 +34,7 @@ Implement the task using the project conventions. Run the applicable checks from
 
 ## 4. Reflect Always
 
-Before the final response, create `.memoryq/last-result.md` with:
+Before the final response, you **MUST** create `.memoryq/last-result.md`. This step is mandatory and cannot be skipped. Include:
 
 - original prompt
 - `runId`
@@ -47,15 +47,15 @@ Before the final response, create `.memoryq/last-result.md` with:
 Then run:
 
 ```bash
-memoryq reflect --run-id "<runId>" --result-file ".memoryq/last-result.md"
+memoryq reflect --run-id "<runId>" --result-file ".memoryq/last-result.md" && rm .memoryq/last-result.md
 ```
 
 Inside this repository, if the local binary is not linked:
 
 ```bash
-npm run memoryq -- reflect --run-id "<runId>" --result-file ".memoryq/last-result.md"
+npm run memoryq -- reflect --run-id "<runId>" --result-file ".memoryq/last-result.md" && rm .memoryq/last-result.md
 ```
 
 Do not manually decide whether a result is worth saving. Always call `reflect`; MemoryQ decides through `shouldPersist`.
 
-If reflection fails, do not hide the task result. Mention the reflection failure in the final response and include the checks that were run.
+If reflection fails, do not hide the task result. Mention the reflection failure in the final response and include the checks that were run. Ensure the result file is deleted even if reflection fails.
