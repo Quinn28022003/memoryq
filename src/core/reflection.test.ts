@@ -66,4 +66,26 @@ describe("analyzeReflectionFallback", () => {
         expect(result.newLessons).toHaveLength(0);
         expect(result.updatedKnowledge).toHaveLength(0);
     });
+
+    it("extracts long architectural rules and layered architecture constraints", () => {
+        const input = [
+            "Enforce layered architecture: composition -> services -> repository -> platform-contracts.",
+            "Strict rule: api-gateway must NOT import repositories directly; it must go through platform-contracts.",
+            "Only repository layer is allowed to interact with database directly."
+        ].join("\n");
+
+        const result = analyzeReflectionFallback(input, {
+            taskType: "refactor",
+            scope: ["src"]
+        });
+
+        expect(result.shouldPersist).toBe(true);
+        expect(result.newLessons.length).toBeGreaterThanOrEqual(2);
+        expect(result.newLessons.map((l) => l.lessonText)).toContain(
+            "Enforce layered architecture: composition -> services -> repository -> platform-contracts."
+        );
+        expect(result.newLessons.map((l) => l.lessonText)).toContain(
+            "Strict rule: api-gateway must NOT import repositories directly; it must go through platform-contracts."
+        );
+    });
 });

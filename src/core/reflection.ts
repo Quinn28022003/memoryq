@@ -22,6 +22,9 @@ const LESSON_TRIGGERS = [
     "need to",
     "requires",
     "required",
+    "enforce",
+    "rule",
+    "strictly",
     "cần",
     "phải",
     "luôn"
@@ -33,15 +36,18 @@ const KNOWLEDGE_TRIGGERS = [
     "constraint",
     "pattern",
     "module boundary",
-    "dependency"
+    "dependency",
+    "layer",
+    "boundary",
+    "strict rule"
 ];
 
 const ACTIONABLE_MODAL_RE =
-    /\b(must|should|always|never|required|requires?|need(?:s|ed)? to|have to|cannot|forbidden)\b|(?:cần|phải|luôn|không được)/i;
+    /\b(must|should|always|never|required|requires?|need(?:s|ed)? to|have to|cannot|forbidden|strictly)\b|(?:cần|phải|luôn|không được)/i;
 const IMPERATIVE_RE =
-    /^(always\s+)?(add|avoid|create|drop|ensure|keep|normalize|place|prefer|put|store|update|use|write)\b/i;
+    /^(always\s+)?(add|avoid|create|drop|ensure|keep|normalize|place|prefer|put|store|update|use|write|enforce|follow|restrict|forbid|strictly)\b/i;
 const SPECIFIC_CONTEXT_RE =
-    /(`[^`]+`|\/|[a-z0-9_.-]+\.(ts|tsx|js|jsx|sql|md|json|yml|yaml)\b|\b(api|cache|database|embedding|function|index|migration|policy|route|schema|supabase|table|vector)\b)/i;
+    /(`[^`]+`|\/|[a-z0-9_.-]+\.(ts|tsx|js|jsx|sql|md|json|yml|yaml)\b|\b(api|cache|database|embedding|function|index|migration|policy|route|schema|supabase|table|vector|repository|service|contract|adapter|core|port|boundary|layer|dependency|architecture)\b)/i;
 const META_NOISE_RE =
     /\b(memoryq reflect|reflect after work|shouldpersist|runid|storageMode|original prompt|files changed|implementation summary|tests\/checks run|lessons that may help|final response|agent workflow)\b/i;
 const MIGRATION_DOWN_RE = /\bmigration\b/i;
@@ -107,7 +113,7 @@ export function isActionableMemoryText(text: string): boolean {
         return true;
     }
 
-    if (normalized.length < 12 || normalized.length > 260) {
+    if (normalized.length < 12 || normalized.length > 500) {
         return false;
     }
 
