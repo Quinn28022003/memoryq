@@ -50,7 +50,9 @@ function normalizeLessons(
         const key = lessonText.toLowerCase();
         if (!byText.has(key)) {
             const severity =
-                lesson.severity === "low" || lesson.severity === "medium" || lesson.severity === "high"
+                lesson.severity === "low" ||
+                lesson.severity === "medium" ||
+                lesson.severity === "high"
                     ? lesson.severity
                     : "medium";
 
@@ -68,7 +70,7 @@ function normalizeLessons(
 }
 
 export class ReflectService {
-    constructor(private readonly deps: ReflectServiceDeps) { }
+    constructor(private readonly deps: ReflectServiceDeps) {}
 
     async runReflection(request: ReflectRequest): Promise<ReflectResponse> {
         const run = await this.deps.storage.getExecutionRun(request.runId);
@@ -94,7 +96,10 @@ export class ReflectService {
             taskType: run.taskType,
             scope: run.scope
         });
-        const updatedKnowledge = unique([...(ai?.updatedKnowledge ?? []), ...fallback.updatedKnowledge]).slice(0, 8);
+        const updatedKnowledge = unique([
+            ...(ai?.updatedKnowledge ?? []),
+            ...fallback.updatedKnowledge
+        ]).slice(0, 8);
 
         if (shouldPersist && newLessons.length > 0) {
             await this.deps.storage.insertLessons(

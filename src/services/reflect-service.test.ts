@@ -128,7 +128,12 @@ describe("integration: reflect", () => {
                     artifact: false
                 });
 
-                const noArtifactJsonPath = join(rootNoArtifact, ".memoryq", "runs", "run-no-artifact.json");
+                const noArtifactJsonPath = join(
+                    rootNoArtifact,
+                    ".memoryq",
+                    "runs",
+                    "run-no-artifact.json"
+                );
                 expect(await fileExists(noArtifactJsonPath)).toBe(false);
             } finally {
                 await rm(rootNoArtifact, { recursive: true, force: true });

@@ -5,5 +5,5 @@ export const Logging = {
     success: (message: string) => console.log(message),
     info: (message: string) => console.log(message),
     header: (message: string) => console.log(message),
-    critical: (message: string) => console.error(message),
+    critical: (message: string) => console.error(message)
 };

@@ -26,7 +26,15 @@ export interface PlanningAssistant {
     }): Promise<ReflectionAssistantResult | null>;
 }
 
-const TASK_TYPES: TaskType[] = ["bugfix", "feature", "refactor", "test", "docs", "infra", "general"];
+const TASK_TYPES: TaskType[] = [
+    "bugfix",
+    "feature",
+    "refactor",
+    "test",
+    "docs",
+    "infra",
+    "general"
+];
 const RUN_STATUSES: RunStatus[] = ["planned", "completed", "failed", "partial"];
 
 function extractJson(text: string): unknown {
@@ -52,12 +60,16 @@ function toConfidence(value: unknown): number | undefined {
 }
 
 function toTaskType(value: unknown): TaskType | undefined {
-    const normalized = String(value ?? "").trim().toLowerCase();
+    const normalized = String(value ?? "")
+        .trim()
+        .toLowerCase();
     return TASK_TYPES.includes(normalized as TaskType) ? (normalized as TaskType) : undefined;
 }
 
 function toStatus(value: unknown): RunStatus | undefined {
-    const normalized = String(value ?? "").trim().toLowerCase();
+    const normalized = String(value ?? "")
+        .trim()
+        .toLowerCase();
     return RUN_STATUSES.includes(normalized as RunStatus) ? (normalized as RunStatus) : undefined;
 }
 
@@ -65,7 +77,7 @@ export class GroqAdapter implements PlanningAssistant {
     constructor(
         private readonly apiKey: string | undefined,
         private readonly model: string = "llama-3.3-70b-versatile"
-    ) { }
+    ) {}
 
     private isEnabled(): boolean {
         return Boolean(this.apiKey);
@@ -170,7 +182,9 @@ export class GroqAdapter implements PlanningAssistant {
                     const taskType = toTaskType(item.taskType) ?? input.taskType;
                     const severity = String(item.severity ?? "medium").toLowerCase();
                     const normalizedSeverity =
-                        severity === "low" || severity === "medium" || severity === "high" ? severity : "medium";
+                        severity === "low" || severity === "medium" || severity === "high"
+                            ? severity
+                            : "medium";
                     const confidence = toConfidence(item.confidence) ?? 0.6;
                     const lessonText = String(item.lessonText ?? "").trim();
                     const scope = toArray(item.scope);
@@ -194,7 +208,8 @@ export class GroqAdapter implements PlanningAssistant {
                 summary: String(json.summary ?? "").trim() || undefined,
                 newLessons,
                 updatedKnowledge: toArray(json.updatedKnowledge).slice(0, 8),
-                shouldPersist: typeof json.shouldPersist === "boolean" ? json.shouldPersist : undefined,
+                shouldPersist:
+                    typeof json.shouldPersist === "boolean" ? json.shouldPersist : undefined,
                 confidence: toConfidence(json.confidence),
                 status: toStatus(json.status)
             };

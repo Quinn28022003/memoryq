@@ -10,7 +10,7 @@ interface PlanArtifactEnvelope {
 }
 
 export class ArtifactManager {
-    constructor(private readonly rootDir: string = process.cwd()) { }
+    constructor(private readonly rootDir: string = process.cwd()) {}
 
     private get runsDir(): string {
         return join(this.rootDir, ".memoryq", "runs");

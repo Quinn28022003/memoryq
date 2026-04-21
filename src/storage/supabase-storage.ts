@@ -42,7 +42,15 @@ function numberValue(row: JsonObject, key: string): number {
 }
 
 function normalizeTaskType(value: string): TaskType {
-    const allowed: TaskType[] = ["bugfix", "feature", "refactor", "test", "docs", "infra", "general"];
+    const allowed: TaskType[] = [
+        "bugfix",
+        "feature",
+        "refactor",
+        "test",
+        "docs",
+        "infra",
+        "general"
+    ];
     return allowed.includes(value as TaskType) ? (value as TaskType) : "general";
 }
 
@@ -90,7 +98,8 @@ function mapKnowledge(row: JsonObject): ProjectKnowledgeRecord {
     return {
         id: stringValue(row, "id"),
         projectId: stringValue(row, "project_id"),
-        noteType: (stringValue(row, "note_type") as ProjectKnowledgeRecord["noteType"]) || "architecture",
+        noteType:
+            (stringValue(row, "note_type") as ProjectKnowledgeRecord["noteType"]) || "architecture",
         noteText: stringValue(row, "note_text"),
         scope: asArray(row["scope"]),
         confidence: numberValue(row, "confidence"),
@@ -146,7 +155,9 @@ export class SupabaseStorageAdapter implements MemoryStorage {
             .single();
 
         if (error || !data) {
-            throw new Error(`Supabase createExecutionRun failed: ${error?.message ?? "unknown error"}`);
+            throw new Error(
+                `Supabase createExecutionRun failed: ${error?.message ?? "unknown error"}`
+            );
         }
 
         return mapRun(data as JsonObject);
@@ -175,7 +186,11 @@ export class SupabaseStorageAdapter implements MemoryStorage {
     }
 
     async getExecutionRun(runId: string): Promise<ExecutionRunRecord | null> {
-        const { data, error } = await this.client.from("execution_runs").select("*").eq("id", runId).maybeSingle();
+        const { data, error } = await this.client
+            .from("execution_runs")
+            .select("*")
+            .eq("id", runId)
+            .maybeSingle();
 
         if (error) {
             throw new Error(`Supabase getExecutionRun failed: ${error.message}`);
@@ -209,11 +224,15 @@ export class SupabaseStorageAdapter implements MemoryStorage {
         }
 
         const mapped = (data ?? []).map((row) => mapLesson(row as JsonObject));
-        const filtered = mapped.filter((row) => keywordMatches(row.lessonText, query.keywords)).slice(0, query.limit);
+        const filtered = mapped
+            .filter((row) => keywordMatches(row.lessonText, query.keywords))
+            .slice(0, query.limit);
 
         if (filtered.length > 0) {
             const ids = filtered.map((item) => item.id);
-            await this.client.rpc("increment_lesson_reuse_count", { lesson_ids: ids }).throwOnError();
+            await this.client
+                .rpc("increment_lesson_reuse_count", { lesson_ids: ids })
+                .throwOnError();
         }
 
         return filtered;
@@ -323,7 +342,9 @@ export class SupabaseStorageAdapter implements MemoryStorage {
         return (data ?? []).map((row) => mapKnowledge(row as JsonObject));
     }
 
-    async upsertArtifactSummaries(entries: ArtifactSummaryUpsert[]): Promise<CodeArtifactSummaryRecord[]> {
+    async upsertArtifactSummaries(
+        entries: ArtifactSummaryUpsert[]
+    ): Promise<CodeArtifactSummaryRecord[]> {
         if (entries.length === 0) {
             return [];
         }

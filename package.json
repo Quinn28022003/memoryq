@@ -1,48 +1,70 @@
 {
-  "name": "memoryq",
-  "version": "0.1.0",
-  "description": "MemoryQ CLI MVP for coding-agent long-term memory loops",
-  "type": "module",
-  "bin": {
-    "memoryq": "dist/index.js"
-  },
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "lint": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "memoryq": "node --import tsx src/index.ts",
-    "agentmem": "node --import tsx src/index.ts",
-    "migrate:up": "cross-env NODE_ENV=development node scripts/migrate.js up",
-    "migrate:up:force": "cross-env NODE_ENV=development node scripts/migrate.js up:force",
-    "migrate:down": "cross-env NODE_ENV=development node scripts/migrate.js down",
-    "migrate:status": "cross-env NODE_ENV=development node scripts/migrate.js status",
-    "migrate:up:prod": "cross-env NODE_ENV=production node scripts/migrate.js up",
-    "migrate:up:force:prod": "cross-env NODE_ENV=production node scripts/migrate.js up:force",
-    "migrate:down:prod": "cross-env NODE_ENV=production node scripts/migrate.js down"
-  },
-  "keywords": [
-    "cli",
-    "memory",
-    "agents",
-    "supabase",
-    "groq"
-  ],
-  "license": "MIT",
-  "engines": {
-    "node": ">=20"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.54.0",
-    "commander": "^13.1.0",
-    "cross-env": "^7.0.3",
-    "dotenv": "^16.4.7",
-    "zod": "^3.24.2"
-  },
-  "devDependencies": {
-    "@types/node": "^22.13.10",
-    "tsx": "^4.19.3",
-    "typescript": "^5.8.2",
-    "vitest": "^3.0.8"
-  }
+    "name": "memoryq",
+    "version": "0.1.0",
+    "description": "MemoryQ CLI MVP for coding-agent long-term memory loops",
+    "type": "module",
+    "bin": {
+        "memoryq": "dist/index.js"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "typecheck": "tsc --noEmit",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier . --write",
+        "format:check": "prettier . --check",
+        "precommit": "lint-staged",
+        "prepare": "husky",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "memoryq": "node --import tsx src/index.ts",
+        "agentmem": "node --import tsx src/index.ts",
+        "migrate:up": "cross-env NODE_ENV=development node scripts/migrate.js up",
+        "migrate:up:force": "cross-env NODE_ENV=development node scripts/migrate.js up:force",
+        "migrate:down": "cross-env NODE_ENV=development node scripts/migrate.js down",
+        "migrate:status": "cross-env NODE_ENV=development node scripts/migrate.js status",
+        "migrate:up:prod": "cross-env NODE_ENV=production node scripts/migrate.js up",
+        "migrate:up:force:prod": "cross-env NODE_ENV=production node scripts/migrate.js up:force",
+        "migrate:down:prod": "cross-env NODE_ENV=production node scripts/migrate.js down"
+    },
+    "keywords": [
+        "cli",
+        "memory",
+        "agents",
+        "supabase",
+        "groq"
+    ],
+    "license": "MIT",
+    "engines": {
+        "node": ">=20"
+    },
+    "dependencies": {
+        "@supabase/supabase-js": "^2.54.0",
+        "commander": "^13.1.0",
+        "cross-env": "^7.0.3",
+        "dotenv": "^16.4.7",
+        "zod": "^3.24.2"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/node": "^22.13.10",
+        "eslint": "^10.2.1",
+        "eslint-config-prettier": "^10.1.8",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.4.0",
+        "prettier": "^3.8.3",
+        "tsx": "^4.19.3",
+        "typescript": "^5.8.2",
+        "typescript-eslint": "^8.59.0",
+        "vitest": "^3.0.8"
+    },
+    "lint-staged": {
+        "*.{ts,js,mjs,cjs}": [
+            "eslint --fix",
+            "prettier --write"
+        ],
+        "*.{json,md,yml,yaml,sql,sh}": [
+            "prettier --write"
+        ]
+    }
 }

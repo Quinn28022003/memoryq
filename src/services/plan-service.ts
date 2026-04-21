@@ -53,7 +53,7 @@ function defaultVerification(taskType: TaskType): string[] {
 }
 
 export class PlanService {
-    constructor(private readonly deps: PlanServiceDeps) { }
+    constructor(private readonly deps: PlanServiceDeps) {}
 
     async runPlan(request: PlanRequest): Promise<PlanResponse> {
         const runId = randomUUID();
@@ -101,9 +101,21 @@ export class PlanService {
         ]).slice(0, 10);
 
         const sources: BriefSource[] = [
-            ...lessons.map((item) => ({ type: "lesson" as const, id: item.id, confidence: item.confidence })),
-            ...knowledge.map((item) => ({ type: "knowledge" as const, id: item.id, confidence: item.confidence })),
-            ...artifacts.map((item) => ({ type: "artifact" as const, id: item.id, confidence: item.confidence }))
+            ...lessons.map((item) => ({
+                type: "lesson" as const,
+                id: item.id,
+                confidence: item.confidence
+            })),
+            ...knowledge.map((item) => ({
+                type: "knowledge" as const,
+                id: item.id,
+                confidence: item.confidence
+            })),
+            ...artifacts.map((item) => ({
+                type: "artifact" as const,
+                id: item.id,
+                confidence: item.confidence
+            }))
         ];
 
         const retrievalSignal = Math.min(

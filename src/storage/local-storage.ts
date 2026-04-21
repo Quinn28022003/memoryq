@@ -18,11 +18,14 @@ import type {
     ExecutionRunRecord,
     ProjectKnowledgeRecord,
     ProjectLessonRecord,
-    StorageMode,
-    TaskType
+    StorageMode
 } from "../types.js";
 
-type TableName = "execution_runs" | "project_lessons" | "project_knowledge" | "code_artifact_summaries";
+type TableName =
+    | "execution_runs"
+    | "project_lessons"
+    | "project_knowledge"
+    | "code_artifact_summaries";
 
 function unique(values: string[]): string[] {
     return [...new Set(values.filter(Boolean))];
@@ -49,7 +52,7 @@ function keywordMatches(text: string, keywords: string[]): boolean {
 export class LocalStorageAdapter implements MemoryStorage {
     readonly mode: StorageMode = "local-fallback";
 
-    constructor(private readonly rootDir: string = process.cwd()) { }
+    constructor(private readonly rootDir: string = process.cwd()) {}
 
     getMode(): StorageMode {
         return this.mode;
@@ -184,7 +187,8 @@ export class LocalStorageAdapter implements MemoryStorage {
     }
 
     async queryArtifactSummaries(query: ArtifactQuery): Promise<CodeArtifactSummaryRecord[]> {
-        const summaries = await this.loadTable<CodeArtifactSummaryRecord>("code_artifact_summaries");
+        const summaries =
+            await this.loadTable<CodeArtifactSummaryRecord>("code_artifact_summaries");
 
         return summaries
             .filter((summary) => summary.projectId === query.projectId)
@@ -271,7 +275,9 @@ export class LocalStorageAdapter implements MemoryStorage {
         return result;
     }
 
-    async upsertArtifactSummaries(entries: ArtifactSummaryUpsert[]): Promise<CodeArtifactSummaryRecord[]> {
+    async upsertArtifactSummaries(
+        entries: ArtifactSummaryUpsert[]
+    ): Promise<CodeArtifactSummaryRecord[]> {
         if (entries.length === 0) {
             return [];
         }

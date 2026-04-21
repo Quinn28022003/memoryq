@@ -24,6 +24,20 @@ npm test
 npm run memoryq -- plan --prompt "fix api-gateway route"
 ```
 
+## Quality checks
+
+```bash
+npm run typecheck
+npm run lint
+npm run format:check
+npm test
+npm run build
+```
+
+Use `npm run lint:fix` and `npm run format` before larger commits. Husky runs `lint-staged`
+on pre-commit, and GitHub Actions runs the full validation pipeline on pushes and pull requests
+to `main`.
+
 ## Supabase migrations
 
 Before running migrations for the first time, open the Supabase SQL Editor and run:

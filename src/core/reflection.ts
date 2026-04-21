@@ -9,12 +9,30 @@ export interface ReflectionAnalysis {
     status: RunStatus;
 }
 
-const LESSON_TRIGGERS = ["because", "root cause", "lesson", "avoid", "next time", "fixed by", "should"];
+const LESSON_TRIGGERS = [
+    "because",
+    "root cause",
+    "lesson",
+    "avoid",
+    "next time",
+    "fixed by",
+    "should"
+];
 
-const KNOWLEDGE_TRIGGERS = ["architecture", "convention", "constraint", "pattern", "module boundary", "dependency"];
+const KNOWLEDGE_TRIGGERS = [
+    "architecture",
+    "convention",
+    "constraint",
+    "pattern",
+    "module boundary",
+    "dependency"
+];
 
 function normalizeSentence(sentence: string): string {
-    return sentence.replace(/\s+/g, " ").trim().replace(/^[-*\d.\s]+/, "");
+    return sentence
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/^[-*\d.\s]+/, "");
 }
 
 function splitSentences(input: string): string[] {

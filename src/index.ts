@@ -33,16 +33,18 @@ async function run(): Promise<void> {
         .requiredOption("--prompt <text>", "Prompt for planning")
         .option("--format <format>", "Output format: json|markdown", parseFormat, "json")
         .option("--no-artifact", "Do not write .memoryq/runs artifacts")
-        .action(async (options: { prompt: string; format: "json" | "markdown"; artifact: boolean }) => {
-            const context = createCliContext();
-            const planService = new PlanService(context);
-            const output = await executePlanCommand(planService, {
-                prompt: options.prompt,
-                format: options.format,
-                artifact: options.artifact
-            });
-            process.stdout.write(`${output}\n`);
-        });
+        .action(
+            async (options: { prompt: string; format: "json" | "markdown"; artifact: boolean }) => {
+                const context = createCliContext();
+                const planService = new PlanService(context);
+                const output = await executePlanCommand(planService, {
+                    prompt: options.prompt,
+                    format: options.format,
+                    artifact: options.artifact
+                });
+                process.stdout.write(`${output}\n`);
+            }
+        );
 
     program
         .command("reflect")

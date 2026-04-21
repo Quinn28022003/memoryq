@@ -63,7 +63,9 @@ function unique(values: string[]): string[] {
 function extractPathLikeTokens(input: string): string[] {
     const matches = input
         .toLowerCase()
-        .match(/[a-z0-9._-]+(?:\/[a-z0-9._/-]+)+|[a-z0-9._-]+\.(?:ts|tsx|js|jsx|json|md|sql|yml|yaml)/g);
+        .match(
+            /[a-z0-9._-]+(?:\/[a-z0-9._/-]+)+|[a-z0-9._-]+\.(?:ts|tsx|js|jsx|json|md|sql|yml|yaml)/g
+        );
     return unique(matches ?? []);
 }
 

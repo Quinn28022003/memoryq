@@ -38,7 +38,10 @@ export class HybridStorage implements MemoryStorage {
         if (options.primary !== undefined) {
             this.primary = options.primary;
         } else if (options.supabaseUrl && options.supabaseServiceRoleKey) {
-            this.primary = new SupabaseStorageAdapter(options.supabaseUrl, options.supabaseServiceRoleKey);
+            this.primary = new SupabaseStorageAdapter(
+                options.supabaseUrl,
+                options.supabaseServiceRoleKey
+            );
         } else {
             this.primary = null;
         }
@@ -75,9 +78,8 @@ export class HybridStorage implements MemoryStorage {
 
     async createExecutionRun(input: ExecutionRunInsert): Promise<ExecutionRunRecord> {
         const primary = this.primary;
-        return this.withFallback(
-            primary ? () => primary.createExecutionRun(input) : null,
-            () => this.local.createExecutionRun(input)
+        return this.withFallback(primary ? () => primary.createExecutionRun(input) : null, () =>
+            this.local.createExecutionRun(input)
         );
     }
 
@@ -112,45 +114,42 @@ export class HybridStorage implements MemoryStorage {
 
     async queryLessons(query: LessonQuery): Promise<ProjectLessonRecord[]> {
         const primary = this.primary;
-        return this.withFallback(
-            primary ? () => primary.queryLessons(query) : null,
-            () => this.local.queryLessons(query)
+        return this.withFallback(primary ? () => primary.queryLessons(query) : null, () =>
+            this.local.queryLessons(query)
         );
     }
 
     async queryKnowledge(query: KnowledgeQuery): Promise<ProjectKnowledgeRecord[]> {
         const primary = this.primary;
-        return this.withFallback(
-            primary ? () => primary.queryKnowledge(query) : null,
-            () => this.local.queryKnowledge(query)
+        return this.withFallback(primary ? () => primary.queryKnowledge(query) : null, () =>
+            this.local.queryKnowledge(query)
         );
     }
 
     async queryArtifactSummaries(query: ArtifactQuery): Promise<CodeArtifactSummaryRecord[]> {
         const primary = this.primary;
-        return this.withFallback(
-            primary ? () => primary.queryArtifactSummaries(query) : null,
-            () => this.local.queryArtifactSummaries(query)
+        return this.withFallback(primary ? () => primary.queryArtifactSummaries(query) : null, () =>
+            this.local.queryArtifactSummaries(query)
         );
     }
 
     async insertLessons(lessons: LessonInsert[]): Promise<ProjectLessonRecord[]> {
         const primary = this.primary;
-        return this.withFallback(
-            primary ? () => primary.insertLessons(lessons) : null,
-            () => this.local.insertLessons(lessons)
+        return this.withFallback(primary ? () => primary.insertLessons(lessons) : null, () =>
+            this.local.insertLessons(lessons)
         );
     }
 
     async upsertKnowledge(notes: KnowledgeUpsert[]): Promise<ProjectKnowledgeRecord[]> {
         const primary = this.primary;
-        return this.withFallback(
-            primary ? () => primary.upsertKnowledge(notes) : null,
-            () => this.local.upsertKnowledge(notes)
+        return this.withFallback(primary ? () => primary.upsertKnowledge(notes) : null, () =>
+            this.local.upsertKnowledge(notes)
         );
     }
 
-    async upsertArtifactSummaries(entries: ArtifactSummaryUpsert[]): Promise<CodeArtifactSummaryRecord[]> {
+    async upsertArtifactSummaries(
+        entries: ArtifactSummaryUpsert[]
+    ): Promise<CodeArtifactSummaryRecord[]> {
         const primary = this.primary;
         return this.withFallback(
             primary ? () => primary.upsertArtifactSummaries(entries) : null,

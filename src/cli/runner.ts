@@ -44,7 +44,7 @@ export async function executeReflectCommand(
     }
 
     const resultText = hasResult
-        ? options.result ?? ""
+        ? (options.result ?? "")
         : await readFile(options.resultFile as string, "utf8");
 
     const { output } = await reflectService.runReflection({
