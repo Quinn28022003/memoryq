@@ -1,4 +1,4 @@
-import type { NormalizedLesson, RunStatus, TaskType } from "../types.js";
+import type { MemoryScene, NormalizedLesson, RunStatus, SourceType, TaskType } from "../types.js";
 
 export interface PlanAssistantResult {
     taskType?: TaskType;
@@ -24,6 +24,12 @@ export interface PlanningAssistant {
         taskType: TaskType;
         scope: string[];
     }): Promise<ReflectionAssistantResult | null>;
+    extractMemoryScenes(input: {
+        text: string;
+        sourceType: SourceType;
+        scope: string[];
+        taskType?: TaskType | null;
+    }): Promise<MemoryScene[] | null>;
 }
 
 const TASK_TYPES: TaskType[] = [
@@ -217,6 +223,49 @@ export class GroqAdapter implements PlanningAssistant {
             return null;
         }
     }
+
+    async extractMemoryScenes(input: {
+        text: string;
+        sourceType: SourceType;
+        scope: string[];
+        taskType?: TaskType | null;
+    }): Promise<MemoryScene[] | null> {
+        if (!this.isEnabled()) {
+            return null;
+        }
+
+        const systemContent = [
+            "You split coding-agent memory into scene-based chunks for retrieval.",
+            "A scene is one coherent situation, decision, constraint, lesson, or file behavior.",
+            "Do not split by token count. Do not create overlapping chunks unless the meaning truly changes.",
+            "Return strict JSON only with key scenes.",
+            "scenes must be an array of objects with keys label and content.",
+            "Each content should be self-contained and useful for future coding agents."
+        ].join(" ");
+        const userContent = [
+            `sourceType: ${input.sourceType}`,
+            `taskType: ${input.taskType ?? "unknown"}`,
+            `scope: ${JSON.stringify(input.scope)}`,
+            `memoryText: ${input.text}`
+        ].join("\n");
+
+        try {
+            const json = (await this.call(systemContent, userContent)) as Record<string, unknown>;
+            const scenesRaw = Array.isArray(json.scenes) ? json.scenes : [];
+            const scenes = scenesRaw
+                .map((scene) => scene as Record<string, unknown>)
+                .map((scene) => ({
+                    label: String(scene.label ?? "Scene").trim(),
+                    content: String(scene.content ?? "").trim()
+                }))
+                .filter((scene) => scene.content.length > 0)
+                .slice(0, 8);
+
+            return scenes.length > 0 ? scenes : null;
+        } catch {
+            return null;
+        }
+    }
 }
 
 export class NullAssistant implements PlanningAssistant {
@@ -225,6 +274,10 @@ export class NullAssistant implements PlanningAssistant {
     }
 
     async analyzeReflection(): Promise<null> {
+        return null;
+    }
+
+    async extractMemoryScenes(): Promise<null> {
         return null;
     }
 }

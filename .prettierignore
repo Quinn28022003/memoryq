@@ -3,3 +3,4 @@ node_modules
 coverage
 .memoryq
 package-lock.json
+*.sql

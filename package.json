@@ -1,6 +1,6 @@
 {
     "name": "memoryq",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "MemoryQ CLI MVP for coding-agent long-term memory loops",
     "type": "module",
     "bin": {
@@ -63,7 +63,7 @@
             "eslint --fix",
             "prettier --write"
         ],
-        "*.{json,md,yml,yaml,sql,sh}": [
+        "*.{json,md,yml,yaml,sh}": [
             "prettier --write"
         ]
     }

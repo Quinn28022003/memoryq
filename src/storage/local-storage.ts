@@ -9,6 +9,8 @@ import type {
     ExecutionRunUpdate,
     KnowledgeQuery,
     KnowledgeUpsert,
+    MemoryEmbeddingQuery,
+    MemoryEmbeddingUpsert,
     LessonInsert,
     LessonQuery,
     MemoryStorage
@@ -16,6 +18,7 @@ import type {
 import type {
     CodeArtifactSummaryRecord,
     ExecutionRunRecord,
+    MemoryEmbeddingRecord,
     ProjectKnowledgeRecord,
     ProjectLessonRecord,
     StorageMode
@@ -25,7 +28,8 @@ type TableName =
     | "execution_runs"
     | "project_lessons"
     | "project_knowledge"
-    | "code_artifact_summaries";
+    | "code_artifact_summaries"
+    | "memory_embeddings";
 
 function unique(values: string[]): string[] {
     return [...new Set(values.filter(Boolean))];
@@ -47,6 +51,34 @@ function keywordMatches(text: string, keywords: string[]): boolean {
 
     const lower = text.toLowerCase();
     return keywords.some((keyword) => lower.includes(keyword.toLowerCase()));
+}
+
+function cosineSimilarity(left: number[] | undefined, right: number[] | undefined): number {
+    if (
+        !left ||
+        !right ||
+        left.length === 0 ||
+        right.length === 0 ||
+        left.length !== right.length
+    ) {
+        return 0;
+    }
+
+    let dot = 0;
+    let leftMagnitude = 0;
+    let rightMagnitude = 0;
+
+    for (let index = 0; index < left.length; index += 1) {
+        dot += left[index] * right[index];
+        leftMagnitude += left[index] * left[index];
+        rightMagnitude += right[index] * right[index];
+    }
+
+    if (leftMagnitude === 0 || rightMagnitude === 0) {
+        return 0;
+    }
+
+    return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
 }
 
 export class LocalStorageAdapter implements MemoryStorage {
@@ -134,6 +166,30 @@ export class LocalStorageAdapter implements MemoryStorage {
 
     async queryLessons(query: LessonQuery): Promise<ProjectLessonRecord[]> {
         const lessons = await this.loadTable<ProjectLessonRecord>("project_lessons");
+        const matchedMemory = query.embedding
+            ? await this.queryMemoryEmbeddings({
+                  projectId: query.projectId,
+                  ownerType: query.ownerType,
+                  ownerId: query.ownerId,
+                  sourceType: "lesson",
+                  embedding: query.embedding,
+                  limit: query.limit,
+                  threshold: 0.1
+              })
+            : [];
+
+        if (matchedMemory.length > 0) {
+            const ids = matchedMemory.map((memory) => memory.sourceId);
+            const order = new Map(ids.map((id, index) => [id, index]));
+            const matchedLessons = lessons
+                .filter((lesson) => order.has(lesson.id))
+                .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+                .slice(0, query.limit);
+
+            if (matchedLessons.length > 0) {
+                return matchedLessons;
+            }
+        }
 
         const filtered = lessons
             .filter((lesson) => lesson.projectId === query.projectId)
@@ -172,6 +228,30 @@ export class LocalStorageAdapter implements MemoryStorage {
 
     async queryKnowledge(query: KnowledgeQuery): Promise<ProjectKnowledgeRecord[]> {
         const notes = await this.loadTable<ProjectKnowledgeRecord>("project_knowledge");
+        const matchedMemory = query.embedding
+            ? await this.queryMemoryEmbeddings({
+                  projectId: query.projectId,
+                  ownerType: query.ownerType,
+                  ownerId: query.ownerId,
+                  sourceType: "knowledge",
+                  embedding: query.embedding,
+                  limit: query.limit,
+                  threshold: 0.1
+              })
+            : [];
+
+        if (matchedMemory.length > 0) {
+            const ids = matchedMemory.map((memory) => memory.sourceId);
+            const order = new Map(ids.map((id, index) => [id, index]));
+            const matchedNotes = notes
+                .filter((note) => order.has(note.id))
+                .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+                .slice(0, query.limit);
+
+            if (matchedNotes.length > 0) {
+                return matchedNotes;
+            }
+        }
 
         return notes
             .filter((note) => note.projectId === query.projectId)
@@ -189,6 +269,30 @@ export class LocalStorageAdapter implements MemoryStorage {
     async queryArtifactSummaries(query: ArtifactQuery): Promise<CodeArtifactSummaryRecord[]> {
         const summaries =
             await this.loadTable<CodeArtifactSummaryRecord>("code_artifact_summaries");
+        const matchedMemory = query.embedding
+            ? await this.queryMemoryEmbeddings({
+                  projectId: query.projectId,
+                  ownerType: query.ownerType,
+                  ownerId: query.ownerId,
+                  sourceType: "artifact",
+                  embedding: query.embedding,
+                  limit: query.limit,
+                  threshold: 0.1
+              })
+            : [];
+
+        if (matchedMemory.length > 0) {
+            const ids = matchedMemory.map((memory) => memory.sourceId);
+            const order = new Map(ids.map((id, index) => [id, index]));
+            const matchedSummaries = summaries
+                .filter((summary) => order.has(summary.id))
+                .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+                .slice(0, query.limit);
+
+            if (matchedSummaries.length > 0) {
+                return matchedSummaries;
+            }
+        }
 
         return summaries
             .filter((summary) => summary.projectId === query.projectId)
@@ -200,6 +304,31 @@ export class LocalStorageAdapter implements MemoryStorage {
                     keywordMatches(`${summary.filePath} ${summary.summary}`, query.keywords)
             )
             .sort((a, b) => b.confidence - a.confidence)
+            .slice(0, query.limit);
+    }
+
+    async queryMemoryEmbeddings(query: MemoryEmbeddingQuery): Promise<MemoryEmbeddingRecord[]> {
+        const memories = await this.loadTable<MemoryEmbeddingRecord>("memory_embeddings");
+        const threshold = query.threshold ?? 0.1;
+
+        return memories
+            .filter((memory) => memory.projectId === query.projectId)
+            .filter((memory) => memory.sourceType === query.sourceType)
+            .filter((memory) => !query.ownerType || memory.ownerType === query.ownerType)
+            .filter((memory) => !query.ownerId || memory.ownerId === query.ownerId)
+            .filter(
+                (memory) =>
+                    !query.taskType || !memory.taskType || memory.taskType === query.taskType
+            )
+            .map((memory) => ({
+                memory,
+                similarity: cosineSimilarity(memory.embedding, query.embedding)
+            }))
+            .filter(({ similarity }) => similarity >= threshold)
+            .sort(
+                (a, b) => b.similarity - a.similarity || b.memory.confidence - a.memory.confidence
+            )
+            .map(({ memory }) => memory)
             .slice(0, query.limit);
     }
 
@@ -318,6 +447,69 @@ export class LocalStorageAdapter implements MemoryStorage {
         }
 
         await this.saveTable("code_artifact_summaries", rows);
+        return result;
+    }
+
+    async upsertMemoryEmbeddings(
+        entries: MemoryEmbeddingUpsert[]
+    ): Promise<MemoryEmbeddingRecord[]> {
+        if (entries.length === 0) {
+            return [];
+        }
+
+        const rows = await this.loadTable<MemoryEmbeddingRecord>("memory_embeddings");
+        const now = new Date().toISOString();
+        const result: MemoryEmbeddingRecord[] = [];
+
+        for (const entry of entries) {
+            const index = rows.findIndex(
+                (row) =>
+                    row.projectId === entry.projectId &&
+                    row.ownerType === entry.ownerType &&
+                    row.ownerId === entry.ownerId &&
+                    row.sourceType === entry.sourceType &&
+                    row.sourceId === entry.sourceId &&
+                    row.chunkIndex === entry.chunkIndex
+            );
+
+            if (index >= 0) {
+                rows[index] = {
+                    ...rows[index],
+                    sceneLabel: entry.sceneLabel,
+                    content: entry.content,
+                    scope: unique(entry.scope),
+                    taskType: entry.taskType,
+                    confidence: entry.confidence,
+                    embedding: entry.embedding,
+                    metadata: entry.metadata ?? {},
+                    updatedAt: now
+                };
+                result.push(rows[index]);
+            } else {
+                const created: MemoryEmbeddingRecord = {
+                    id: randomUUID(),
+                    projectId: entry.projectId,
+                    ownerType: entry.ownerType,
+                    ownerId: entry.ownerId,
+                    sourceType: entry.sourceType,
+                    sourceId: entry.sourceId,
+                    chunkIndex: entry.chunkIndex,
+                    sceneLabel: entry.sceneLabel,
+                    content: entry.content,
+                    scope: unique(entry.scope),
+                    taskType: entry.taskType,
+                    confidence: entry.confidence,
+                    embedding: entry.embedding,
+                    metadata: entry.metadata ?? {},
+                    createdAt: now,
+                    updatedAt: now
+                };
+                rows.push(created);
+                result.push(created);
+            }
+        }
+
+        await this.saveTable("memory_embeddings", rows);
         return result;
     }
 }

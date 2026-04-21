@@ -7,6 +7,8 @@ import type {
     ExecutionRunUpdate,
     KnowledgeQuery,
     KnowledgeUpsert,
+    MemoryEmbeddingQuery,
+    MemoryEmbeddingUpsert,
     LessonInsert,
     LessonQuery,
     MemoryStorage
@@ -14,6 +16,7 @@ import type {
 import type {
     CodeArtifactSummaryRecord,
     ExecutionRunRecord,
+    MemoryEmbeddingRecord,
     ProjectKnowledgeRecord,
     ProjectLessonRecord,
     StorageMode
@@ -133,6 +136,13 @@ export class HybridStorage implements MemoryStorage {
         );
     }
 
+    async queryMemoryEmbeddings(query: MemoryEmbeddingQuery): Promise<MemoryEmbeddingRecord[]> {
+        const primary = this.primary;
+        return this.withFallback(primary ? () => primary.queryMemoryEmbeddings(query) : null, () =>
+            this.local.queryMemoryEmbeddings(query)
+        );
+    }
+
     async insertLessons(lessons: LessonInsert[]): Promise<ProjectLessonRecord[]> {
         const primary = this.primary;
         return this.withFallback(primary ? () => primary.insertLessons(lessons) : null, () =>
@@ -154,6 +164,16 @@ export class HybridStorage implements MemoryStorage {
         return this.withFallback(
             primary ? () => primary.upsertArtifactSummaries(entries) : null,
             () => this.local.upsertArtifactSummaries(entries)
+        );
+    }
+
+    async upsertMemoryEmbeddings(
+        entries: MemoryEmbeddingUpsert[]
+    ): Promise<MemoryEmbeddingRecord[]> {
+        const primary = this.primary;
+        return this.withFallback(
+            primary ? () => primary.upsertMemoryEmbeddings(entries) : null,
+            () => this.local.upsertMemoryEmbeddings(entries)
         );
     }
 }

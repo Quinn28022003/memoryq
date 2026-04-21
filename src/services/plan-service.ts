@@ -3,16 +3,20 @@ import { randomUUID } from "node:crypto";
 import { classifyPromptFallback } from "../core/classification.js";
 import { renderPlanMarkdown } from "../core/markdown.js";
 import { planOutputSchema } from "../contracts.js";
+import type { EmbeddingAdapter } from "../adapters/embeddings.js";
 import type { PlanningAssistant } from "../adapters/groq.js";
 import type { ArtifactManager } from "../core/artifacts.js";
 import type { MemoryStorage } from "../storage/types.js";
-import type { BriefSource, PlanBrief, PlanOutput, TaskType } from "../types.js";
+import type { BriefSource, MemoryOwnerType, PlanBrief, PlanOutput, TaskType } from "../types.js";
 
 export interface PlanServiceDeps {
     storage: MemoryStorage;
     assistant: PlanningAssistant;
+    embedder?: EmbeddingAdapter;
     artifactManager: ArtifactManager;
     projectId: string;
+    ownerType?: MemoryOwnerType;
+    ownerId?: string;
     now?: () => Date;
 }
 
@@ -63,6 +67,8 @@ export class PlanService {
         const taskType = ai?.taskType ?? fallback.taskType;
         const scope = unique([...(ai?.scope ?? []), ...fallback.scope]).slice(0, 10);
         const keywords = unique([...(ai?.keywords ?? []), ...fallback.keywords]).slice(0, 16);
+        const retrievalText = unique([request.prompt, ...scope, ...keywords]).join("\n");
+        const embedding = await this.deps.embedder?.embedText(retrievalText);
         const verificationPlan = unique([
             ...(ai?.verificationPlan ?? []),
             ...fallback.verificationPlan,
@@ -72,21 +78,30 @@ export class PlanService {
         const [lessons, knowledge, artifacts] = await Promise.all([
             this.deps.storage.queryLessons({
                 projectId: this.deps.projectId,
+                ownerType: this.deps.ownerType,
+                ownerId: this.deps.ownerId,
                 taskType,
                 scope,
                 keywords,
+                embedding,
                 limit: 6
             }),
             this.deps.storage.queryKnowledge({
                 projectId: this.deps.projectId,
+                ownerType: this.deps.ownerType,
+                ownerId: this.deps.ownerId,
                 scope,
                 keywords,
+                embedding,
                 limit: 6
             }),
             this.deps.storage.queryArtifactSummaries({
                 projectId: this.deps.projectId,
+                ownerType: this.deps.ownerType,
+                ownerId: this.deps.ownerId,
                 scope,
                 keywords,
+                embedding,
                 limit: 8
             })
         ]);

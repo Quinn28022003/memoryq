@@ -14,6 +14,13 @@ MemoryQ is a TypeScript CLI that gives coding agents a structured long-term memo
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `GROQ_API_KEY`
 - `GROQ_MODEL` (optional, defaults to `llama-3.3-70b-versatile`)
+- `MEMORYQ_OWNER_TYPE` (optional: `project`, `agent`, or `user`; defaults to `project`)
+- `MEMORYQ_OWNER_ID` (optional, defaults to `MEMORYQ_PROJECT_ID`)
+- `MEMORYQ_EMBEDDING_BASE_URL` (optional, defaults to Groq's OpenAI-compatible endpoint)
+- `MEMORYQ_EMBEDDING_API_KEY` (optional, defaults to `GROQ_API_KEY`)
+- `MEMORYQ_EMBEDDING_MODEL` (optional, defaults to `nomic-embed-text-v1_5`)
+- `MEMORYQ_EMBEDDING_DIMENSIONS` (optional, defaults to `768`; keep this aligned with the Supabase vector migration)
+- `MEMORYQ_EMBEDDING_INCLUDE_DIMENSIONS` (optional, set `true` only for providers that support a `dimensions` parameter)
 - `MEMORYQ_PROJECT_ID` (optional)
 
 ## Development
@@ -23,6 +30,35 @@ npm install
 npm test
 npm run memoryq -- plan --prompt "fix api-gateway route"
 ```
+
+## Agent workflow
+
+MemoryQ is intended to be used by coding agents as a required loop:
+
+```text
+user prompt -> memoryq plan -> agent work -> verification -> memoryq reflect
+```
+
+Every agent should read [AGENTS.md](./AGENTS.md) before working in this repository. The short version:
+
+```bash
+memoryq plan --prompt "<verbatim user prompt>" --format json
+# do the task and run relevant checks
+memoryq reflect --run-id "<runId>" --result-file ".memoryq/last-result.md"
+```
+
+For the full lifecycle and local-package setup in another project, see
+[docs/agent-workflow.md](./docs/agent-workflow.md).
+
+## Using MemoryQ in another project
+
+Recommended integration is a local package or workspace dependency:
+
+1. Add MemoryQ to the target project as a local package, workspace package, or git dependency.
+2. Expose the `memoryq` binary or an npm script in the target project.
+3. Configure Supabase and Groq env vars in the target project's `.env`.
+4. Copy `AGENTS.md` into the target project root so agents automatically follow the MemoryQ loop.
+5. Run `memoryq plan` before implementation and `memoryq reflect` after every task.
 
 ## Quality checks
 

@@ -1,7 +1,10 @@
 import type {
     CodeArtifactSummaryRecord,
+    EmbeddingVector,
     ExecutionRunRecord,
     KnowledgeType,
+    MemoryEmbeddingRecord,
+    MemoryOwnerType,
     NormalizedLesson,
     PlanBrief,
     ProjectKnowledgeRecord,
@@ -30,23 +33,32 @@ export interface ExecutionRunUpdate {
 
 export interface LessonQuery {
     projectId: string;
+    ownerType?: MemoryOwnerType;
+    ownerId?: string;
     taskType: TaskType;
     scope: string[];
     keywords: string[];
+    embedding?: EmbeddingVector;
     limit: number;
 }
 
 export interface KnowledgeQuery {
     projectId: string;
+    ownerType?: MemoryOwnerType;
+    ownerId?: string;
     scope: string[];
     keywords: string[];
+    embedding?: EmbeddingVector;
     limit: number;
 }
 
 export interface ArtifactQuery {
     projectId: string;
+    ownerType?: MemoryOwnerType;
+    ownerId?: string;
     scope: string[];
     keywords: string[];
+    embedding?: EmbeddingVector;
     limit: number;
 }
 
@@ -72,6 +84,33 @@ export interface ArtifactSummaryUpsert {
     confidence: number;
 }
 
+export interface MemoryEmbeddingUpsert {
+    projectId: string;
+    ownerType: MemoryOwnerType;
+    ownerId: string;
+    sourceType: "lesson" | "knowledge" | "artifact";
+    sourceId: string;
+    chunkIndex: number;
+    sceneLabel: string;
+    content: string;
+    scope: string[];
+    taskType: TaskType | null;
+    confidence: number;
+    embedding: EmbeddingVector;
+    metadata?: Record<string, unknown>;
+}
+
+export interface MemoryEmbeddingQuery {
+    projectId: string;
+    ownerType?: MemoryOwnerType;
+    ownerId?: string;
+    sourceType: "lesson" | "knowledge" | "artifact";
+    taskType?: TaskType;
+    embedding: EmbeddingVector;
+    limit: number;
+    threshold?: number;
+}
+
 export interface MemoryStorage {
     readonly mode: StorageMode;
     getMode(): StorageMode;
@@ -81,7 +120,9 @@ export interface MemoryStorage {
     queryLessons(query: LessonQuery): Promise<ProjectLessonRecord[]>;
     queryKnowledge(query: KnowledgeQuery): Promise<ProjectKnowledgeRecord[]>;
     queryArtifactSummaries(query: ArtifactQuery): Promise<CodeArtifactSummaryRecord[]>;
+    queryMemoryEmbeddings(query: MemoryEmbeddingQuery): Promise<MemoryEmbeddingRecord[]>;
     insertLessons(lessons: LessonInsert[]): Promise<ProjectLessonRecord[]>;
     upsertKnowledge(notes: KnowledgeUpsert[]): Promise<ProjectKnowledgeRecord[]>;
     upsertArtifactSummaries(entries: ArtifactSummaryUpsert[]): Promise<CodeArtifactSummaryRecord[]>;
+    upsertMemoryEmbeddings(entries: MemoryEmbeddingUpsert[]): Promise<MemoryEmbeddingRecord[]>;
 }

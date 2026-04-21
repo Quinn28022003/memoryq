@@ -7,6 +7,8 @@ import type {
     ExecutionRunUpdate,
     KnowledgeQuery,
     KnowledgeUpsert,
+    MemoryEmbeddingQuery,
+    MemoryEmbeddingUpsert,
     LessonInsert,
     LessonQuery,
     MemoryStorage
@@ -14,6 +16,8 @@ import type {
 import type {
     CodeArtifactSummaryRecord,
     ExecutionRunRecord,
+    MemoryEmbeddingRecord,
+    MemoryOwnerType,
     ProjectKnowledgeRecord,
     ProjectLessonRecord,
     StorageMode,
@@ -39,6 +43,30 @@ function numberValue(row: JsonObject, key: string): number {
 
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function embeddingValue(row: JsonObject, key: string): number[] {
+    const value = row[key];
+    if (Array.isArray(value)) {
+        return value.map((item) => Number(item)).filter((item) => Number.isFinite(item));
+    }
+
+    if (typeof value !== "string") {
+        return [];
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+        return [];
+    }
+
+    const parsed = trimmed
+        .slice(1, -1)
+        .split(",")
+        .map((item) => Number(item.trim()))
+        .filter((item) => Number.isFinite(item));
+
+    return parsed;
 }
 
 function normalizeTaskType(value: string): TaskType {
@@ -117,6 +145,35 @@ function mapArtifact(row: JsonObject): CodeArtifactSummaryRecord {
         summary: stringValue(row, "summary"),
         scope: asArray(row["scope"]),
         confidence: numberValue(row, "confidence"),
+        updatedAt: stringValue(row, "updated_at")
+    };
+}
+
+function normalizeOwnerType(value: string): MemoryOwnerType {
+    const allowed: MemoryOwnerType[] = ["project", "agent", "user"];
+    return allowed.includes(value as MemoryOwnerType) ? (value as MemoryOwnerType) : "project";
+}
+
+function mapMemoryEmbedding(row: JsonObject): MemoryEmbeddingRecord {
+    return {
+        id: stringValue(row, "id"),
+        projectId: stringValue(row, "project_id"),
+        ownerType: normalizeOwnerType(stringValue(row, "owner_type")),
+        ownerId: stringValue(row, "owner_id"),
+        sourceType:
+            (stringValue(row, "source_type") as MemoryEmbeddingRecord["sourceType"]) || "lesson",
+        sourceId: stringValue(row, "source_id"),
+        chunkIndex: numberValue(row, "chunk_index"),
+        sceneLabel: stringValue(row, "scene_label"),
+        content: stringValue(row, "content"),
+        scope: asArray(row["scope"]),
+        taskType: stringValue(row, "task_type")
+            ? normalizeTaskType(stringValue(row, "task_type"))
+            : null,
+        confidence: numberValue(row, "confidence"),
+        embedding: embeddingValue(row, "embedding"),
+        metadata: (row["metadata"] as Record<string, unknown> | null) ?? {},
+        createdAt: stringValue(row, "created_at"),
         updatedAt: stringValue(row, "updated_at")
     };
 }
@@ -200,6 +257,42 @@ export class SupabaseStorageAdapter implements MemoryStorage {
     }
 
     async queryLessons(query: LessonQuery): Promise<ProjectLessonRecord[]> {
+        if (query.embedding) {
+            const matchedMemory = await this.queryMemoryEmbeddings({
+                projectId: query.projectId,
+                ownerType: query.ownerType,
+                ownerId: query.ownerId,
+                sourceType: "lesson",
+                embedding: query.embedding,
+                limit: query.limit,
+                threshold: 0.1
+            });
+
+            if (matchedMemory.length > 0) {
+                const ids = matchedMemory.map((memory) => memory.sourceId);
+                const { data, error } = await this.client
+                    .from("project_lessons")
+                    .select("*")
+                    .in("id", ids);
+
+                if (!error && data) {
+                    const order = new Map(ids.map((id, index) => [id, index]));
+                    const matched = data
+                        .map((row) => mapLesson(row as JsonObject))
+                        .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+                        .slice(0, query.limit);
+
+                    if (matched.length > 0) {
+                        const lessonIds = matched.map((item) => item.id);
+                        await this.client
+                            .rpc("increment_lesson_reuse_count", { lesson_ids: lessonIds })
+                            .throwOnError();
+                        return matched;
+                    }
+                }
+            }
+        }
+
         let request = this.client
             .from("project_lessons")
             .select("*")
@@ -239,6 +332,38 @@ export class SupabaseStorageAdapter implements MemoryStorage {
     }
 
     async queryKnowledge(query: KnowledgeQuery): Promise<ProjectKnowledgeRecord[]> {
+        if (query.embedding) {
+            const matchedMemory = await this.queryMemoryEmbeddings({
+                projectId: query.projectId,
+                ownerType: query.ownerType,
+                ownerId: query.ownerId,
+                sourceType: "knowledge",
+                embedding: query.embedding,
+                limit: query.limit,
+                threshold: 0.1
+            });
+
+            if (matchedMemory.length > 0) {
+                const ids = matchedMemory.map((memory) => memory.sourceId);
+                const { data, error } = await this.client
+                    .from("project_knowledge")
+                    .select("*")
+                    .in("id", ids);
+
+                if (!error && data) {
+                    const order = new Map(ids.map((id, index) => [id, index]));
+                    const matched = data
+                        .map((row) => mapKnowledge(row as JsonObject))
+                        .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+                        .slice(0, query.limit);
+
+                    if (matched.length > 0) {
+                        return matched;
+                    }
+                }
+            }
+        }
+
         let request = this.client
             .from("project_knowledge")
             .select("*")
@@ -264,6 +389,38 @@ export class SupabaseStorageAdapter implements MemoryStorage {
     }
 
     async queryArtifactSummaries(query: ArtifactQuery): Promise<CodeArtifactSummaryRecord[]> {
+        if (query.embedding) {
+            const matchedMemory = await this.queryMemoryEmbeddings({
+                projectId: query.projectId,
+                ownerType: query.ownerType,
+                ownerId: query.ownerId,
+                sourceType: "artifact",
+                embedding: query.embedding,
+                limit: query.limit,
+                threshold: 0.1
+            });
+
+            if (matchedMemory.length > 0) {
+                const ids = matchedMemory.map((memory) => memory.sourceId);
+                const { data, error } = await this.client
+                    .from("code_artifact_summaries")
+                    .select("*")
+                    .in("id", ids);
+
+                if (!error && data) {
+                    const order = new Map(ids.map((id, index) => [id, index]));
+                    const matched = data
+                        .map((row) => mapArtifact(row as JsonObject))
+                        .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+                        .slice(0, query.limit);
+
+                    if (matched.length > 0) {
+                        return matched;
+                    }
+                }
+            }
+        }
+
         let request = this.client
             .from("code_artifact_summaries")
             .select("*")
@@ -286,6 +443,30 @@ export class SupabaseStorageAdapter implements MemoryStorage {
             .map((row) => mapArtifact(row as JsonObject))
             .filter((row) => keywordMatches(`${row.filePath} ${row.summary}`, query.keywords))
             .slice(0, query.limit);
+    }
+
+    async queryMemoryEmbeddings(query: MemoryEmbeddingQuery): Promise<MemoryEmbeddingRecord[]> {
+        try {
+            const { data, error } = await this.client.rpc("match_memory_embeddings", {
+                match_project_id: query.projectId,
+                match_owner_type: query.ownerType ?? null,
+                match_owner_id: query.ownerId ?? null,
+                match_source_type: query.sourceType,
+                match_task_type: query.taskType ?? null,
+                query_embedding: query.embedding,
+                match_count: query.limit,
+                match_threshold: query.threshold ?? 0.1
+            });
+
+            if (error) {
+                throw error;
+            }
+
+            const rows = (data ?? []) as unknown[];
+            return rows.map((row) => mapMemoryEmbedding(row as JsonObject));
+        } catch {
+            return [];
+        }
     }
 
     async insertLessons(lessons: LessonInsert[]): Promise<ProjectLessonRecord[]> {
@@ -370,5 +551,44 @@ export class SupabaseStorageAdapter implements MemoryStorage {
         }
 
         return (data ?? []).map((row) => mapArtifact(row as JsonObject));
+    }
+
+    async upsertMemoryEmbeddings(
+        entries: MemoryEmbeddingUpsert[]
+    ): Promise<MemoryEmbeddingRecord[]> {
+        if (entries.length === 0) {
+            return [];
+        }
+
+        const { data, error } = await this.client
+            .from("memory_embeddings")
+            .upsert(
+                entries.map((entry) => ({
+                    project_id: entry.projectId,
+                    owner_type: entry.ownerType,
+                    owner_id: entry.ownerId,
+                    source_type: entry.sourceType,
+                    source_id: entry.sourceId,
+                    chunk_index: entry.chunkIndex,
+                    scene_label: entry.sceneLabel,
+                    content: entry.content,
+                    scope: entry.scope,
+                    task_type: entry.taskType,
+                    confidence: entry.confidence,
+                    embedding: entry.embedding,
+                    metadata: entry.metadata ?? {},
+                    updated_at: new Date().toISOString()
+                })),
+                {
+                    onConflict: "project_id,owner_type,owner_id,source_type,source_id,chunk_index"
+                }
+            )
+            .select("*");
+
+        if (error) {
+            throw new Error(`Supabase upsertMemoryEmbeddings failed: ${error.message}`);
+        }
+
+        return (data ?? []).map((row) => mapMemoryEmbedding(row as JsonObject));
     }
 }

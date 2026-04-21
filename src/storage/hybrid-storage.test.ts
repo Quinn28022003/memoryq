@@ -30,6 +30,9 @@ function failingStorage(): MemoryStorage {
         queryArtifactSummaries: async () => {
             throw new Error("supabase unavailable");
         },
+        queryMemoryEmbeddings: async () => {
+            throw new Error("supabase unavailable");
+        },
         insertLessons: async () => {
             throw new Error("supabase unavailable");
         },
@@ -37,6 +40,9 @@ function failingStorage(): MemoryStorage {
             throw new Error("supabase unavailable");
         },
         upsertArtifactSummaries: async () => {
+            throw new Error("supabase unavailable");
+        },
+        upsertMemoryEmbeddings: async () => {
             throw new Error("supabase unavailable");
         }
     };

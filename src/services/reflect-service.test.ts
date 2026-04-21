@@ -36,7 +36,8 @@ const assistant: PlanningAssistant = {
                 confidence: 0.78
             }
         ]
-    })
+    }),
+    extractMemoryScenes: async ({ text }) => [{ label: "Route normalization", content: text }]
 };
 
 async function fileExists(path: string): Promise<boolean> {

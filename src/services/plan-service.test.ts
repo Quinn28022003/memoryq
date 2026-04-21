@@ -20,7 +20,8 @@ const assistant: PlanningAssistant = {
         verificationPlan: ["pnpm test", "pnpm lint"],
         confidence: 0.7
     }),
-    analyzeReflection: async () => null
+    analyzeReflection: async () => null,
+    extractMemoryScenes: async () => null
 };
 
 async function fileExists(path: string): Promise<boolean> {

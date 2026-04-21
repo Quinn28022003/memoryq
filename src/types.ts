@@ -6,6 +6,15 @@ export type StorageMode = "supabase" | "local-fallback";
 
 export type SourceType = "lesson" | "knowledge" | "artifact";
 
+export type EmbeddingVector = number[];
+
+export type MemoryOwnerType = "project" | "agent" | "user";
+
+export interface MemoryScene {
+    label: string;
+    content: string;
+}
+
 export interface BriefSource {
     type: SourceType;
     id: string;
@@ -96,5 +105,24 @@ export interface CodeArtifactSummaryRecord {
     summary: string;
     scope: string[];
     confidence: number;
+    updatedAt: string;
+}
+
+export interface MemoryEmbeddingRecord {
+    id: string;
+    projectId: string;
+    ownerType: MemoryOwnerType;
+    ownerId: string;
+    sourceType: SourceType;
+    sourceId: string;
+    chunkIndex: number;
+    sceneLabel: string;
+    content: string;
+    scope: string[];
+    taskType: TaskType | null;
+    confidence: number;
+    embedding: EmbeddingVector;
+    metadata: Record<string, unknown>;
+    createdAt: string;
     updatedAt: string;
 }
