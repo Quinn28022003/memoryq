@@ -1,0 +1,48 @@
+{
+  "name": "memoryq",
+  "version": "0.1.0",
+  "description": "MemoryQ CLI MVP for coding-agent long-term memory loops",
+  "type": "module",
+  "bin": {
+    "memoryq": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "memoryq": "node --import tsx src/index.ts",
+    "agentmem": "node --import tsx src/index.ts",
+    "migrate:up": "cross-env NODE_ENV=development node scripts/migrate.js up",
+    "migrate:up:force": "cross-env NODE_ENV=development node scripts/migrate.js up:force",
+    "migrate:down": "cross-env NODE_ENV=development node scripts/migrate.js down",
+    "migrate:status": "cross-env NODE_ENV=development node scripts/migrate.js status",
+    "migrate:up:prod": "cross-env NODE_ENV=production node scripts/migrate.js up",
+    "migrate:up:force:prod": "cross-env NODE_ENV=production node scripts/migrate.js up:force",
+    "migrate:down:prod": "cross-env NODE_ENV=production node scripts/migrate.js down"
+  },
+  "keywords": [
+    "cli",
+    "memory",
+    "agents",
+    "supabase",
+    "groq"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.54.0",
+    "commander": "^13.1.0",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.7",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}
