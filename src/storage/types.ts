@@ -122,6 +122,7 @@ export interface MemoryStorage {
     queryArtifactSummaries(query: ArtifactQuery): Promise<CodeArtifactSummaryRecord[]>;
     queryMemoryEmbeddings(query: MemoryEmbeddingQuery): Promise<MemoryEmbeddingRecord[]>;
     insertLessons(lessons: LessonInsert[]): Promise<ProjectLessonRecord[]>;
+    upsertLessons(lessons: LessonInsert[]): Promise<ProjectLessonRecord[]>;
     upsertKnowledge(notes: KnowledgeUpsert[]): Promise<ProjectKnowledgeRecord[]>;
     upsertArtifactSummaries(entries: ArtifactSummaryUpsert[]): Promise<CodeArtifactSummaryRecord[]>;
     upsertMemoryEmbeddings(entries: MemoryEmbeddingUpsert[]): Promise<MemoryEmbeddingRecord[]>;

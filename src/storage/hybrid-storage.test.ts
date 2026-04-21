@@ -36,6 +36,9 @@ function failingStorage(): MemoryStorage {
         insertLessons: async () => {
             throw new Error("supabase unavailable");
         },
+        upsertLessons: async () => {
+            throw new Error("supabase unavailable");
+        },
         upsertKnowledge: async () => {
             throw new Error("supabase unavailable");
         },
@@ -73,6 +76,47 @@ describe("HybridStorage", () => {
             expect(storage.getMode()).toBe("local-fallback");
             const loaded = await local.getExecutionRun("run-local-1");
             expect(loaded?.id).toBe("run-local-1");
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
+    it("delegates upsertLessons to local storage when primary is null", async () => {
+        const root = await mkdtemp(join(tmpdir(), "memoryq-storage-"));
+
+        try {
+            const local = new LocalStorageAdapter(root);
+            const storage = new HybridStorage({
+                primary: null,
+                local
+            });
+
+            const lessons = await storage.upsertLessons([
+                {
+                    projectId: "p1",
+                    lessonText: "Always use strict mode",
+                    lessonKey: "strict-mode",
+                    scope: ["typescript"],
+                    taskType: "general",
+                    severity: "medium",
+                    confidence: 0.9,
+                    sourceRunId: "run-1"
+                }
+            ]);
+
+            expect(lessons).toHaveLength(1);
+            expect(lessons[0].lessonKey).toBe("strict-mode");
+            expect(storage.getMode()).toBe("local-fallback");
+
+            const localLessons = await local.queryLessons({
+                projectId: "p1",
+                taskType: "general",
+                scope: [],
+                keywords: ["strict"],
+                limit: 1
+            });
+            expect(localLessons).toHaveLength(1);
+            expect(localLessons[0].lessonKey).toBe("strict-mode");
         } finally {
             await rm(root, { recursive: true, force: true });
         }

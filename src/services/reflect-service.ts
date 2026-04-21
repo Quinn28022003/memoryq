@@ -204,74 +204,6 @@ export class ReflectService {
         return null;
     }
 
-    private async filterSemanticDuplicateLessons(
-        lessons: NormalizedLesson[],
-        context: { taskType: TaskType; scope: string[] }
-    ): Promise<NormalizedLesson[]> {
-        const accepted: NormalizedLesson[] = [];
-        const acceptedEmbeddings: EmbeddingVector[] = [];
-
-        for (const lesson of lessons) {
-            const sceneEmbeddings = await this.embedScenes({
-                sourceType: "lesson",
-                text: lesson.lessonText,
-                scope: lesson.scope.length > 0 ? lesson.scope : context.scope,
-                taskType: lesson.taskType || context.taskType
-            });
-            const embeddings = sceneEmbeddings.map((entry) => entry.embedding);
-
-            if (
-                embeddings.length > 0 &&
-                (this.hasAcceptedSemanticDuplicate(embeddings, acceptedEmbeddings) ||
-                    (await this.findPersistedSemanticDuplicate({
-                        sourceType: "lesson",
-                        embeddings
-                    })))
-            ) {
-                continue;
-            }
-
-            accepted.push(lesson);
-            acceptedEmbeddings.push(...embeddings);
-        }
-
-        return accepted;
-    }
-
-    private async filterSemanticDuplicateKnowledge(
-        notes: string[],
-        context: { taskType: TaskType; scope: string[] }
-    ): Promise<string[]> {
-        const accepted: string[] = [];
-        const acceptedEmbeddings: EmbeddingVector[] = [];
-
-        for (const note of notes) {
-            const sceneEmbeddings = await this.embedScenes({
-                sourceType: "knowledge",
-                text: note,
-                scope: context.scope,
-                taskType: context.taskType
-            });
-            const embeddings = sceneEmbeddings.map((entry) => entry.embedding);
-
-            if (
-                embeddings.length > 0 &&
-                (this.hasAcceptedSemanticDuplicate(embeddings, acceptedEmbeddings) ||
-                    (await this.findPersistedSemanticDuplicate({
-                        sourceType: "knowledge",
-                        embeddings
-                    })))
-            ) {
-                continue;
-            }
-
-            accepted.push(note);
-            acceptedEmbeddings.push(...embeddings);
-        }
-
-        return accepted;
-    }
-
     private async createMemoryEmbeddings(input: {
         sourceType: SourceType;
         sourceId: string;
@@ -348,31 +280,67 @@ export class ReflectService {
                 return normalized ? [normalized] : [];
             })
         ).slice(0, 8);
-        const newLessons = requestedPersist
-            ? await this.filterSemanticDuplicateLessons(candidateLessons, {
-                  taskType: run.taskType,
-                  scope: run.scope
-              })
-            : candidateLessons;
-        const updatedKnowledge = requestedPersist
-            ? await this.filterSemanticDuplicateKnowledge(candidateKnowledge, {
-                  taskType: run.taskType,
-                  scope: run.scope
-              })
-            : candidateKnowledge;
-        const shouldPersist =
-            requestedPersist && (newLessons.length > 0 || updatedKnowledge.length > 0);
 
-        if (shouldPersist && newLessons.length > 0) {
-            const insertedLessons = await this.deps.storage.insertLessons(
-                newLessons.map((lesson) => ({
-                    ...lesson,
-                    projectId: this.deps.projectId,
-                    sourceRunId: run.id
-                }))
+        const newLessons: NormalizedLesson[] = [];
+        const updatedKnowledge = candidateKnowledge;
+        const shouldPersist =
+            requestedPersist && (candidateLessons.length > 0 || updatedKnowledge.length > 0);
+
+        if (shouldPersist && candidateLessons.length > 0) {
+            // Embed all candidate lessons to check for semantic duplicates and for storage
+            const lessonsWithEmbeddings = await Promise.all(
+                candidateLessons.map(async (lesson) => {
+                    const sceneEmbeddings = await this.embedScenes({
+                        sourceType: "lesson",
+                        text: lesson.lessonText,
+                        scope: lesson.scope,
+                        taskType: lesson.taskType
+                    });
+                    return {
+                        ...lesson,
+                        embedding: sceneEmbeddings[0]?.embedding
+                    };
+                })
             );
+
+            // Prepare for upsert and identify truly new lessons for the output
+            const lessonsToUpsert = await Promise.all(
+                lessonsWithEmbeddings.map(async (lesson) => {
+                    if (lesson.embedding) {
+                        const duplicate = await this.findPersistedSemanticDuplicate({
+                            sourceType: "lesson",
+                            embeddings: [lesson.embedding]
+                        });
+
+                        if (duplicate) {
+                            return {
+                                ...lesson,
+                                projectId: this.deps.projectId,
+                                sourceRunId: run.id,
+                                lessonKey:
+                                    lesson.lessonKey ||
+                                    (duplicate.metadata?.lessonKey as string) ||
+                                    duplicate.sourceId
+                            };
+                        }
+                    }
+
+                    // If not a duplicate, add to the output.newLessons
+                    newLessons.push(lesson);
+
+                    return {
+                        ...lesson,
+                        projectId: this.deps.projectId,
+                        sourceRunId: run.id
+                    };
+                })
+            );
+
+            const upsertedLessons = await this.deps.storage.upsertLessons(lessonsToUpsert);
+
+            // Persist memory embeddings for search (chunked scenes)
             const memoryEntries = await Promise.all(
-                insertedLessons.map((lesson: ProjectLessonRecord) =>
+                upsertedLessons.map((lesson: ProjectLessonRecord) =>
                     this.createMemoryEmbeddings({
                         sourceType: "lesson",
                         sourceId: lesson.id,
@@ -382,12 +350,15 @@ export class ReflectService {
                         confidence: lesson.confidence,
                         metadata: {
                             severity: lesson.severity,
-                            sourceRunId: lesson.sourceRunId
+                            sourceRunId: lesson.sourceRunId,
+                            lessonKey: lesson.lessonKey
                         }
                     })
                 )
             );
             await this.persistMemoryEmbeddings(memoryEntries.flat());
+        } else if (!shouldPersist) {
+            newLessons.push(...candidateLessons);
         }
 
         if (shouldPersist && updatedKnowledge.length > 0) {

@@ -344,12 +344,14 @@ export class LocalStorageAdapter implements MemoryStorage {
             id: randomUUID(),
             projectId: lesson.projectId,
             lessonText: lesson.lessonText,
+            lessonKey: lesson.lessonKey,
             scope: unique(lesson.scope),
             taskType: lesson.taskType,
             severity: lesson.severity,
             confidence: lesson.confidence,
             sourceRunId: lesson.sourceRunId,
             reuseCount: 0,
+            embedding: lesson.embedding,
             createdAt: now,
             updatedAt: now
         }));
@@ -357,6 +359,68 @@ export class LocalStorageAdapter implements MemoryStorage {
         rows.push(...inserted);
         await this.saveTable("project_lessons", rows);
         return inserted;
+    }
+
+    async upsertLessons(lessons: LessonInsert[]): Promise<ProjectLessonRecord[]> {
+        if (lessons.length === 0) {
+            return [];
+        }
+
+        const rows = await this.loadTable<ProjectLessonRecord>("project_lessons");
+        const now = new Date().toISOString();
+        const result: ProjectLessonRecord[] = [];
+
+        for (const lesson of lessons) {
+            const index = rows.findIndex(
+                (row) =>
+                    row.projectId === lesson.projectId &&
+                    ((lesson.lessonKey &&
+                        (row.lessonKey === lesson.lessonKey || row.id === lesson.lessonKey)) ||
+                        row.lessonText.toLowerCase() === lesson.lessonText.toLowerCase())
+            );
+
+            if (index >= 0) {
+                rows[index] = {
+                    ...rows[index],
+                    lessonText: lesson.lessonText,
+                    lessonKey: lesson.lessonKey ?? rows[index].lessonKey,
+                    scope: unique([...rows[index].scope, ...lesson.scope]),
+                    taskType:
+                        rows[index].taskType === "general" ? lesson.taskType : rows[index].taskType,
+                    severity:
+                        lesson.severity === "high" ||
+                        (lesson.severity === "medium" && rows[index].severity === "low")
+                            ? lesson.severity
+                            : rows[index].severity,
+                    confidence: (rows[index].confidence + lesson.confidence) / 2,
+                    sourceRunId: lesson.sourceRunId,
+                    embedding: lesson.embedding ?? rows[index].embedding,
+                    updatedAt: now
+                };
+                result.push(rows[index]);
+            } else {
+                const created: ProjectLessonRecord = {
+                    id: randomUUID(),
+                    projectId: lesson.projectId,
+                    lessonText: lesson.lessonText,
+                    lessonKey: lesson.lessonKey,
+                    scope: unique(lesson.scope),
+                    taskType: lesson.taskType,
+                    severity: lesson.severity,
+                    confidence: lesson.confidence,
+                    sourceRunId: lesson.sourceRunId,
+                    reuseCount: 0,
+                    embedding: lesson.embedding,
+                    createdAt: now,
+                    updatedAt: now
+                };
+                rows.push(created);
+                result.push(created);
+            }
+        }
+
+        await this.saveTable("project_lessons", rows);
+        return result;
     }
 
     async upsertKnowledge(notes: KnowledgeUpsert[]): Promise<ProjectKnowledgeRecord[]> {

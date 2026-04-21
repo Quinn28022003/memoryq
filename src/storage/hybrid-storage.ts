@@ -150,6 +150,13 @@ export class HybridStorage implements MemoryStorage {
         );
     }
 
+    async upsertLessons(lessons: LessonInsert[]): Promise<ProjectLessonRecord[]> {
+        const primary = this.primary;
+        return this.withFallback(primary ? () => primary.upsertLessons(lessons) : null, () =>
+            this.local.upsertLessons(lessons)
+        );
+    }
+
     async upsertKnowledge(notes: KnowledgeUpsert[]): Promise<ProjectKnowledgeRecord[]> {
         const primary = this.primary;
         return this.withFallback(primary ? () => primary.upsertKnowledge(notes) : null, () =>

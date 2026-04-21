@@ -69,10 +69,12 @@ export type LessonSeverity = "low" | "medium" | "high";
 
 export interface NormalizedLesson {
     lessonText: string;
+    lessonKey?: string;
     scope: string[];
     taskType: TaskType;
     severity: LessonSeverity;
     confidence: number;
+    embedding?: EmbeddingVector;
 }
 
 export interface ProjectLessonRecord extends NormalizedLesson {

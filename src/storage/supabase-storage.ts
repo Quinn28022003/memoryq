@@ -111,12 +111,14 @@ function mapLesson(row: JsonObject): ProjectLessonRecord {
         id: stringValue(row, "id"),
         projectId: stringValue(row, "project_id"),
         lessonText: stringValue(row, "lesson_text"),
+        lessonKey: row["lesson_key"] ? stringValue(row, "lesson_key") : undefined,
         scope: asArray(row["scope"]),
         taskType: normalizeTaskType(stringValue(row, "task_type")),
         severity: (stringValue(row, "severity") as ProjectLessonRecord["severity"]) || "medium",
         confidence: numberValue(row, "confidence"),
         sourceRunId: stringValue(row, "source_run_id"),
         reuseCount: numberValue(row, "reuse_count"),
+        embedding: row["embedding"] ? embeddingValue(row, "embedding") : undefined,
         createdAt: stringValue(row, "created_at"),
         updatedAt: stringValue(row, "updated_at")
     };
@@ -480,11 +482,13 @@ export class SupabaseStorageAdapter implements MemoryStorage {
                 lessons.map((lesson) => ({
                     project_id: lesson.projectId,
                     lesson_text: lesson.lessonText,
+                    lesson_key: lesson.lessonKey || null,
                     scope: lesson.scope,
                     task_type: lesson.taskType,
                     severity: lesson.severity,
                     confidence: lesson.confidence,
-                    source_run_id: lesson.sourceRunId
+                    source_run_id: lesson.sourceRunId,
+                    embedding: lesson.embedding || null
                 }))
             )
             .select("*");
@@ -494,6 +498,38 @@ export class SupabaseStorageAdapter implements MemoryStorage {
         }
 
         return (data ?? []).map((row) => mapLesson(row as JsonObject));
+    }
+
+    async upsertLessons(lessons: LessonInsert[]): Promise<ProjectLessonRecord[]> {
+        if (lessons.length === 0) {
+            return [];
+        }
+
+        const results: ProjectLessonRecord[] = [];
+
+        for (const lesson of lessons) {
+            const { data, error } = await this.client.rpc("upsert_project_lesson", {
+                p_project_id: lesson.projectId,
+                p_lesson_text: lesson.lessonText,
+                p_lesson_key: lesson.lessonKey || null,
+                p_scope: lesson.scope,
+                p_task_type: lesson.taskType,
+                p_severity: lesson.severity,
+                p_confidence: lesson.confidence,
+                p_source_run_id: lesson.sourceRunId,
+                p_embedding: lesson.embedding || null
+            });
+
+            if (error) {
+                throw new Error(`Supabase upsert_project_lesson failed: ${error.message}`);
+            }
+
+            if (data) {
+                results.push(mapLesson(data as JsonObject));
+            }
+        }
+
+        return results;
     }
 
     async upsertKnowledge(notes: KnowledgeUpsert[]): Promise<ProjectKnowledgeRecord[]> {
