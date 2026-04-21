@@ -1,0 +1,40 @@
+-- Drop & recreate the entire `public` schema (Supabase/PostgreSQL)
+-- WARNING: This nukes ALL objects in schema public (tables, views, types, policies, functions in public).
+-- Schemas like auth/storage/etc. are untouched.
+
+BEGIN;
+
+DROP SCHEMA IF EXISTS public CASCADE;
+CREATE SCHEMA public;
+
+-- Reapply typical Supabase-style grants (adjust if your roles differ)
+GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL ON SCHEMA public TO postgres, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon, authenticated;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO anon, authenticated;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO postgres, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated;
+
+COMMIT;
+
+-- Notes:
+-- - If you had RLS policies, views, or custom functions in `public`, they’re gone and need to be recreated.
+-- - Extensions in schema `extensions` remain intact. Search_path usually includes `public, extensions`.
+
+
+CREATE OR REPLACE FUNCTION public.exec_sql(sql TEXT)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  EXECUTE sql;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.exec_sql(TEXT) TO service_role;

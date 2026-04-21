@@ -169,6 +169,9 @@ export class GroqAdapter implements PlanningAssistant {
             "You are helping a coding-memory CLI normalize reflection output.",
             "Return strict JSON only with keys: summary, newLessons, updatedKnowledge, shouldPersist, confidence, status.",
             "newLessons is an array of objects with keys: lessonText, scope, taskType, severity, confidence.",
+            "Persist only reusable, actionable coding rules, constraints, conventions, or file behaviors that would change a future implementation.",
+            "Prefer concrete rules with file paths, modules, commands, schemas, or naming patterns.",
+            "Do not persist status narration, compliments, generic summaries, or workflow reminders such as running reflection.",
             "severity must be low, medium, or high.",
             "status must be planned, completed, failed, or partial.",
             "confidence values must be between 0 and 1."

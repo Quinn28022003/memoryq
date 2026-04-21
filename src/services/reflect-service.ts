@@ -1,6 +1,11 @@
 import { basename } from "node:path";
 
-import { analyzeReflectionFallback, classifyKnowledgeType } from "../core/reflection.js";
+import {
+    analyzeReflectionFallback,
+    classifyKnowledgeType,
+    normalizeMemoryKnowledgeText,
+    normalizeMemoryLessonText
+} from "../core/reflection.js";
 import { renderReflectionMarkdown } from "../core/markdown.js";
 import { reflectionOutputSchema } from "../contracts.js";
 import type { EmbeddingAdapter } from "../adapters/embeddings.js";
@@ -87,7 +92,7 @@ function normalizeLessons(
     const byText = new Map<string, NormalizedLesson>();
 
     for (const lesson of rawLessons) {
-        const lessonText = lesson.lessonText.trim();
+        const lessonText = normalizeMemoryLessonText(lesson.lessonText);
         if (!lessonText) {
             continue;
         }
@@ -329,7 +334,7 @@ export class ReflectService {
         const summary = ai?.summary?.trim() || fallback.summary;
         const status = ai?.status ?? fallback.status;
         const confidence = clamp(ai?.confidence ?? fallback.confidence, 0, 1);
-        const shouldPersist = ai?.shouldPersist ?? fallback.shouldPersist;
+        const requestedPersist = ai?.shouldPersist ?? fallback.shouldPersist;
         const candidateLessons = normalizeLessons(
             [...(ai?.newLessons ?? []), ...fallback.newLessons],
             {
@@ -337,22 +342,26 @@ export class ReflectService {
                 scope: run.scope
             }
         );
-        const candidateKnowledge = unique([
-            ...(ai?.updatedKnowledge ?? []),
-            ...fallback.updatedKnowledge
-        ]).slice(0, 8);
-        const newLessons = shouldPersist
+        const candidateKnowledge = unique(
+            [...(ai?.updatedKnowledge ?? []), ...fallback.updatedKnowledge].flatMap((note) => {
+                const normalized = normalizeMemoryKnowledgeText(note);
+                return normalized ? [normalized] : [];
+            })
+        ).slice(0, 8);
+        const newLessons = requestedPersist
             ? await this.filterSemanticDuplicateLessons(candidateLessons, {
                   taskType: run.taskType,
                   scope: run.scope
               })
             : candidateLessons;
-        const updatedKnowledge = shouldPersist
+        const updatedKnowledge = requestedPersist
             ? await this.filterSemanticDuplicateKnowledge(candidateKnowledge, {
                   taskType: run.taskType,
                   scope: run.scope
               })
             : candidateKnowledge;
+        const shouldPersist =
+            requestedPersist && (newLessons.length > 0 || updatedKnowledge.length > 0);
 
         if (shouldPersist && newLessons.length > 0) {
             const insertedLessons = await this.deps.storage.insertLessons(
