@@ -47,6 +47,10 @@ memoryq plan --prompt "<verbatim user prompt>" --format json
 memoryq reflect --run-id "<runId>" --result-file ".memoryq/last-result.md"
 ```
 
+During `reflect`, MemoryQ uses semantic dedupe against `memory_embeddings` before persisting. If the
+same lesson or knowledge already exists with different wording, it is skipped instead of being saved
+again.
+
 For the full lifecycle and local-package setup in another project, see
 [docs/agent-workflow.md](./docs/agent-workflow.md).
 

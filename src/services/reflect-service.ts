@@ -9,6 +9,8 @@ import type { ArtifactManager } from "../core/artifacts.js";
 import type { MemoryEmbeddingUpsert, MemoryStorage } from "../storage/types.js";
 import type {
     CodeArtifactSummaryRecord,
+    EmbeddingVector,
+    MemoryEmbeddingRecord,
     MemoryOwnerType,
     MemoryScene,
     NormalizedLesson,
@@ -41,6 +43,8 @@ export interface ReflectResponse {
     markdown: string;
 }
 
+const SEMANTIC_DUPLICATE_THRESHOLD = 0.88;
+
 function unique(values: string[]): string[] {
     return [...new Set(values.filter(Boolean))];
 }
@@ -52,6 +56,28 @@ function clamp(value: number, min: number, max: number): number {
 function defaultScene(text: string): MemoryScene[] {
     const content = text.trim();
     return content ? [{ label: "Scene", content }] : [];
+}
+
+function cosineSimilarity(left: EmbeddingVector, right: EmbeddingVector): number {
+    if (left.length === 0 || right.length === 0 || left.length !== right.length) {
+        return 0;
+    }
+
+    let dot = 0;
+    let leftMagnitude = 0;
+    let rightMagnitude = 0;
+
+    for (let index = 0; index < left.length; index += 1) {
+        dot += left[index] * right[index];
+        leftMagnitude += left[index] * left[index];
+        rightMagnitude += right[index] * right[index];
+    }
+
+    if (leftMagnitude === 0 || rightMagnitude === 0) {
+        return 0;
+    }
+
+    return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
 }
 
 function normalizeLessons(
@@ -91,31 +117,35 @@ function normalizeLessons(
 export class ReflectService {
     constructor(private readonly deps: ReflectServiceDeps) {}
 
-    private async createMemoryEmbeddings(input: {
+    private async extractScenes(input: {
         sourceType: SourceType;
-        sourceId: string;
         text: string;
         scope: string[];
         taskType: TaskType | null;
-        confidence: number;
-        metadata?: Record<string, unknown>;
-    }): Promise<MemoryEmbeddingUpsert[]> {
-        if (!this.deps.embedder) {
-            return [];
-        }
-
+    }): Promise<MemoryScene[]> {
         const modelScenes = await this.deps.assistant.extractMemoryScenes({
             text: input.text,
             sourceType: input.sourceType,
             scope: input.scope,
             taskType: input.taskType
         });
-        const scenes = (
-            modelScenes && modelScenes.length > 0 ? modelScenes : defaultScene(input.text)
-        )
+
+        return (modelScenes && modelScenes.length > 0 ? modelScenes : defaultScene(input.text))
             .filter((scene) => scene.content.trim().length > 0)
             .slice(0, 8);
+    }
 
+    private async embedScenes(input: {
+        sourceType: SourceType;
+        text: string;
+        scope: string[];
+        taskType: TaskType | null;
+    }): Promise<Array<{ scene: MemoryScene; embedding: EmbeddingVector }>> {
+        if (!this.deps.embedder) {
+            return [];
+        }
+
+        const scenes = await this.extractScenes(input);
         const embeddings = await Promise.all(
             scenes.map((scene) =>
                 this.deps.embedder?.embedText(
@@ -129,14 +159,131 @@ export class ReflectService {
             )
         );
 
-        const entries: MemoryEmbeddingUpsert[] = [];
-
-        scenes.forEach((scene, index) => {
+        return scenes.flatMap((scene, index) => {
             const embedding = embeddings[index];
-            if (!embedding) {
-                return;
+            return embedding ? [{ scene, embedding }] : [];
+        });
+    }
+
+    private hasAcceptedSemanticDuplicate(
+        candidateEmbeddings: EmbeddingVector[],
+        acceptedEmbeddings: EmbeddingVector[]
+    ): boolean {
+        return candidateEmbeddings.some((candidate) =>
+            acceptedEmbeddings.some(
+                (accepted) => cosineSimilarity(candidate, accepted) >= SEMANTIC_DUPLICATE_THRESHOLD
+            )
+        );
+    }
+
+    private async findPersistedSemanticDuplicate(input: {
+        sourceType: SourceType;
+        embeddings: EmbeddingVector[];
+    }): Promise<MemoryEmbeddingRecord | null> {
+        for (const embedding of input.embeddings) {
+            const matches = await this.deps.storage.queryMemoryEmbeddings({
+                projectId: this.deps.projectId,
+                ownerType: this.deps.ownerType ?? "project",
+                ownerId: this.deps.ownerId ?? this.deps.projectId,
+                sourceType: input.sourceType,
+                embedding,
+                limit: 1,
+                threshold: SEMANTIC_DUPLICATE_THRESHOLD
+            });
+
+            if (matches.length > 0) {
+                return matches[0];
+            }
+        }
+
+        return null;
+    }
+
+    private async filterSemanticDuplicateLessons(
+        lessons: NormalizedLesson[],
+        context: { taskType: TaskType; scope: string[] }
+    ): Promise<NormalizedLesson[]> {
+        const accepted: NormalizedLesson[] = [];
+        const acceptedEmbeddings: EmbeddingVector[] = [];
+
+        for (const lesson of lessons) {
+            const sceneEmbeddings = await this.embedScenes({
+                sourceType: "lesson",
+                text: lesson.lessonText,
+                scope: lesson.scope.length > 0 ? lesson.scope : context.scope,
+                taskType: lesson.taskType || context.taskType
+            });
+            const embeddings = sceneEmbeddings.map((entry) => entry.embedding);
+
+            if (
+                embeddings.length > 0 &&
+                (this.hasAcceptedSemanticDuplicate(embeddings, acceptedEmbeddings) ||
+                    (await this.findPersistedSemanticDuplicate({
+                        sourceType: "lesson",
+                        embeddings
+                    })))
+            ) {
+                continue;
             }
 
+            accepted.push(lesson);
+            acceptedEmbeddings.push(...embeddings);
+        }
+
+        return accepted;
+    }
+
+    private async filterSemanticDuplicateKnowledge(
+        notes: string[],
+        context: { taskType: TaskType; scope: string[] }
+    ): Promise<string[]> {
+        const accepted: string[] = [];
+        const acceptedEmbeddings: EmbeddingVector[] = [];
+
+        for (const note of notes) {
+            const sceneEmbeddings = await this.embedScenes({
+                sourceType: "knowledge",
+                text: note,
+                scope: context.scope,
+                taskType: context.taskType
+            });
+            const embeddings = sceneEmbeddings.map((entry) => entry.embedding);
+
+            if (
+                embeddings.length > 0 &&
+                (this.hasAcceptedSemanticDuplicate(embeddings, acceptedEmbeddings) ||
+                    (await this.findPersistedSemanticDuplicate({
+                        sourceType: "knowledge",
+                        embeddings
+                    })))
+            ) {
+                continue;
+            }
+
+            accepted.push(note);
+            acceptedEmbeddings.push(...embeddings);
+        }
+
+        return accepted;
+    }
+
+    private async createMemoryEmbeddings(input: {
+        sourceType: SourceType;
+        sourceId: string;
+        text: string;
+        scope: string[];
+        taskType: TaskType | null;
+        confidence: number;
+        metadata?: Record<string, unknown>;
+    }): Promise<MemoryEmbeddingUpsert[]> {
+        if (!this.deps.embedder) {
+            return [];
+        }
+
+        const sceneEmbeddings = await this.embedScenes(input);
+        const entries: MemoryEmbeddingUpsert[] = [];
+
+        sceneEmbeddings.forEach(({ scene, embedding }, index) => {
             entries.push({
                 projectId: this.deps.projectId,
                 ownerType: this.deps.ownerType ?? "project",
@@ -183,14 +330,29 @@ export class ReflectService {
         const status = ai?.status ?? fallback.status;
         const confidence = clamp(ai?.confidence ?? fallback.confidence, 0, 1);
         const shouldPersist = ai?.shouldPersist ?? fallback.shouldPersist;
-        const newLessons = normalizeLessons([...(ai?.newLessons ?? []), ...fallback.newLessons], {
-            taskType: run.taskType,
-            scope: run.scope
-        });
-        const updatedKnowledge = unique([
+        const candidateLessons = normalizeLessons(
+            [...(ai?.newLessons ?? []), ...fallback.newLessons],
+            {
+                taskType: run.taskType,
+                scope: run.scope
+            }
+        );
+        const candidateKnowledge = unique([
             ...(ai?.updatedKnowledge ?? []),
             ...fallback.updatedKnowledge
         ]).slice(0, 8);
+        const newLessons = shouldPersist
+            ? await this.filterSemanticDuplicateLessons(candidateLessons, {
+                  taskType: run.taskType,
+                  scope: run.scope
+              })
+            : candidateLessons;
+        const updatedKnowledge = shouldPersist
+            ? await this.filterSemanticDuplicateKnowledge(candidateKnowledge, {
+                  taskType: run.taskType,
+                  scope: run.scope
+              })
+            : candidateKnowledge;
 
         if (shouldPersist && newLessons.length > 0) {
             const insertedLessons = await this.deps.storage.insertLessons(

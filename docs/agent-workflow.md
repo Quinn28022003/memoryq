@@ -51,7 +51,9 @@ Then the agent runs:
 memoryq reflect --run-id "<runId>" --result-file ".memoryq/last-result.md"
 ```
 
-`reflect` asks Groq whether the result contains reusable memory. If `shouldPersist` is true, MemoryQ stores lessons and knowledge, asks Groq to split memory into scene-based chunks, embeds each scene with Groq embeddings, and writes those chunks to Supabase `memory_embeddings` with `owner_type`, `owner_id`, `source_type`, `source_id`, and `chunk_index`.
+`reflect` asks Groq whether the result contains reusable memory. If `shouldPersist` is true, MemoryQ first checks candidate lessons and knowledge against existing `memory_embeddings` with a high-similarity semantic dedupe pass. This prevents the same issue or knowledge from being saved again just because it was worded differently.
+
+After dedupe, MemoryQ stores only genuinely new lessons and knowledge, asks Groq to split memory into scene-based chunks, embeds each scene with Groq embeddings, and writes those chunks to Supabase `memory_embeddings` with `owner_type`, `owner_id`, `source_type`, `source_id`, and `chunk_index`.
 
 Agents must always run `reflect`; the model decides whether memory is worth saving.
 
