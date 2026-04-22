@@ -576,4 +576,17 @@ export class LocalStorageAdapter implements MemoryStorage {
         await this.saveTable("memory_embeddings", rows);
         return result;
     }
+
+    async deleteMemoryEmbeddingsForSource(
+        sourceType: "lesson" | "knowledge" | "artifact",
+        sourceId: string
+    ): Promise<void> {
+        const rows = await this.loadTable<MemoryEmbeddingRecord>("memory_embeddings");
+        const filtered = rows.filter(
+            (row) => row.sourceType !== sourceType || row.sourceId !== sourceId
+        );
+        if (filtered.length !== rows.length) {
+            await this.saveTable("memory_embeddings", filtered);
+        }
+    }
 }

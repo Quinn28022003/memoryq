@@ -21,7 +21,8 @@ const assistant: PlanningAssistant = {
         confidence: 0.7
     }),
     analyzeReflection: async () => null,
-    extractMemoryScenes: async () => null
+    extractMemoryScenes: async () => null,
+    summarizeArtifacts: async () => null
 };
 
 async function fileExists(path: string): Promise<boolean> {
@@ -64,7 +65,8 @@ describe("integration: plan", () => {
                 storage,
                 assistant,
                 artifactManager: new ArtifactManager(root),
-                projectId: "default"
+                projectId: "default",
+                rootDir: root
             });
 
             const jsonOutput = await executePlanCommand(service, {

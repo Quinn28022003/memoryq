@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
+import { readFile } from "node:fs/promises";
 
 import {
     analyzeReflectionFallback,
@@ -11,9 +12,13 @@ import { reflectionOutputSchema } from "../contracts.js";
 import type { EmbeddingAdapter } from "../adapters/embeddings.js";
 import type { PlanningAssistant } from "../adapters/groq.js";
 import type { ArtifactManager } from "../core/artifacts.js";
-import type { MemoryEmbeddingUpsert, MemoryStorage } from "../storage/types.js";
 import type {
-    CodeArtifactSummaryRecord,
+    ArtifactSummaryUpsert,
+    MemoryEmbeddingUpsert,
+    MemoryStorage
+} from "../storage/types.js";
+import { canonicalizePath } from "../utils/paths.js";
+import type {
     EmbeddingVector,
     MemoryEmbeddingRecord,
     MemoryOwnerType,
@@ -32,6 +37,7 @@ export interface ReflectServiceDeps {
     embedder?: EmbeddingAdapter;
     artifactManager: ArtifactManager;
     projectId: string;
+    rootDir: string;
     ownerType?: MemoryOwnerType;
     ownerId?: string;
     now?: () => Date;
@@ -390,36 +396,78 @@ export class ReflectService {
             await this.persistMemoryEmbeddings(memoryEntries.flat());
         }
 
-        const files = unique(run.briefPayload?.filesToInspect ?? []).slice(0, 6);
-        if (files.length > 0) {
-            const upsertedArtifacts = await this.deps.storage.upsertArtifactSummaries(
-                files.map((filePath) => ({
+        const rawFiles = unique(run.briefPayload?.filesToInspect ?? []).slice(0, 10);
+        if (rawFiles.length > 0) {
+            const filesWithContent = await Promise.all(
+                rawFiles.map(async (filePath) => {
+                    const canonical = canonicalizePath(filePath, this.deps.rootDir);
+                    let content: string | undefined;
+                    try {
+                        const fullPath = isAbsolute(filePath)
+                            ? filePath
+                            : join(this.deps.rootDir, filePath);
+                        content = await readFile(fullPath, "utf8");
+                    } catch {
+                        // Ignore read errors
+                    }
+                    return { filePath: canonical, content };
+                })
+            );
+
+            const artifactSummaries = await this.deps.assistant.summarizeArtifacts({
+                files: filesWithContent,
+                runSummary: summary,
+                taskType: run.taskType,
+                scope: run.scope
+            });
+
+            const entriesToUpsert: ArtifactSummaryUpsert[] = (artifactSummaries || []).map(
+                (art) => ({
                     projectId: this.deps.projectId,
-                    filePath,
-                    moduleName: basename(filePath),
-                    summary,
-                    scope: run.scope,
-                    confidence
-                }))
+                    filePath: art.filePath,
+                    moduleName: art.moduleName,
+                    summary: art.summary,
+                    scope: art.scope.length > 0 ? unique(art.scope) : run.scope,
+                    confidence: art.confidence
+                })
             );
-            const memoryEntries = await Promise.all(
-                upsertedArtifacts.map((artifact: CodeArtifactSummaryRecord) =>
-                    this.createMemoryEmbeddings({
-                        sourceType: "artifact",
-                        sourceId: artifact.id,
-                        text: unique([artifact.filePath, artifact.summary]).join("\n"),
-                        scope: artifact.scope,
-                        taskType: run.taskType,
-                        confidence: artifact.confidence,
-                        metadata: {
-                            filePath: artifact.filePath,
-                            moduleName: artifact.moduleName,
-                            sourceRunId: run.id
-                        }
-                    })
-                )
-            );
-            await this.persistMemoryEmbeddings(memoryEntries.flat());
+
+            // If AI failed, fallback to generic summaries for all files
+            if (entriesToUpsert.length === 0) {
+                for (const f of filesWithContent) {
+                    entriesToUpsert.push({
+                        projectId: this.deps.projectId,
+                        filePath: f.filePath,
+                        moduleName: basename(f.filePath),
+                        summary,
+                        scope: run.scope,
+                        confidence: 0.5
+                    });
+                }
+            }
+
+            const upsertedArtifacts =
+                await this.deps.storage.upsertArtifactSummaries(entriesToUpsert);
+
+            for (const artifact of upsertedArtifacts) {
+                // Delete existing memory chunks for this artifact to avoid stale entries
+                await this.deps.storage.deleteMemoryEmbeddingsForSource("artifact", artifact.id);
+
+                const memoryEntries = await this.createMemoryEmbeddings({
+                    sourceType: "artifact",
+                    sourceId: artifact.id,
+                    text: unique([artifact.filePath, artifact.summary]).join("\n"),
+                    scope: artifact.scope,
+                    taskType: run.taskType,
+                    confidence: artifact.confidence,
+                    metadata: {
+                        filePath: artifact.filePath,
+                        moduleName: artifact.moduleName,
+                        sourceRunId: run.id
+                    }
+                });
+                await this.persistMemoryEmbeddings(memoryEntries);
+            }
         }
 
         await this.deps.storage.updateExecutionRun(request.runId, {

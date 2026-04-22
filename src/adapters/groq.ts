@@ -17,6 +17,14 @@ export interface ReflectionAssistantResult {
     status?: RunStatus;
 }
 
+export interface ArtifactSummaryResult {
+    filePath: string;
+    moduleName: string;
+    summary: string;
+    scope: string[];
+    confidence: number;
+}
+
 export interface PlanningAssistant {
     analyzePlan(prompt: string): Promise<PlanAssistantResult | null>;
     analyzeReflection(input: {
@@ -30,6 +38,12 @@ export interface PlanningAssistant {
         scope: string[];
         taskType?: TaskType | null;
     }): Promise<MemoryScene[] | null>;
+    summarizeArtifacts(input: {
+        files: Array<{ filePath: string; content?: string }>;
+        runSummary: string;
+        taskType: TaskType;
+        scope: string[];
+    }): Promise<ArtifactSummaryResult[] | null>;
 }
 
 const TASK_TYPES: TaskType[] = [
@@ -270,6 +284,53 @@ export class GroqAdapter implements PlanningAssistant {
             return null;
         }
     }
+
+    async summarizeArtifacts(input: {
+        files: Array<{ filePath: string; content?: string }>;
+        runSummary: string;
+        taskType: TaskType;
+        scope: string[];
+    }): Promise<ArtifactSummaryResult[] | null> {
+        if (!this.isEnabled() || input.files.length === 0) {
+            return null;
+        }
+
+        const systemContent = [
+            "You are helping a coding-memory CLI summarize changes to specific files.",
+            "For each file, provide a concise summary of what was done, its module name, the applicable scope, and your confidence.",
+            "Return strict JSON only with key 'artifacts'.",
+            "artifacts must be an array of objects with keys: filePath, moduleName, summary, scope (array of strings), confidence (0-1).",
+            "Focus on high-level impact: 'Added authentication middleware' rather than 'Added line 45'."
+        ].join(" ");
+
+        const userContent = [
+            `runSummary: ${input.runSummary}`,
+            `taskType: ${input.taskType}`,
+            `globalScope: ${JSON.stringify(input.scope)}`,
+            "Files:",
+            ...input.files.map(
+                (f) =>
+                    `- ${f.filePath}${f.content ? `:\n\`\`\`\n${f.content.slice(0, 2000)}\n\`\`\`` : " (content unavailable)"}`
+            )
+        ].join("\n");
+
+        try {
+            const json = (await this.call(systemContent, userContent)) as Record<string, unknown>;
+            const artifactsRaw = Array.isArray(json.artifacts) ? json.artifacts : [];
+            return artifactsRaw
+                .map((art) => art as Record<string, unknown>)
+                .map((art) => ({
+                    filePath: String(art.filePath ?? "").trim(),
+                    moduleName: String(art.moduleName ?? "").trim(),
+                    summary: String(art.summary ?? "").trim(),
+                    scope: toArray(art.scope),
+                    confidence: toConfidence(art.confidence) ?? 0.8
+                }))
+                .filter((art) => art.filePath && art.summary);
+        } catch {
+            return null;
+        }
+    }
 }
 
 export class NullAssistant implements PlanningAssistant {
@@ -282,6 +343,10 @@ export class NullAssistant implements PlanningAssistant {
     }
 
     async extractMemoryScenes(): Promise<null> {
+        return null;
+    }
+
+    async summarizeArtifacts(): Promise<null> {
         return null;
     }
 }

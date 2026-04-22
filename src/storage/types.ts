@@ -126,4 +126,8 @@ export interface MemoryStorage {
     upsertKnowledge(notes: KnowledgeUpsert[]): Promise<ProjectKnowledgeRecord[]>;
     upsertArtifactSummaries(entries: ArtifactSummaryUpsert[]): Promise<CodeArtifactSummaryRecord[]>;
     upsertMemoryEmbeddings(entries: MemoryEmbeddingUpsert[]): Promise<MemoryEmbeddingRecord[]>;
+    deleteMemoryEmbeddingsForSource(
+        sourceType: "lesson" | "knowledge" | "artifact",
+        sourceId: string
+    ): Promise<void>;
 }

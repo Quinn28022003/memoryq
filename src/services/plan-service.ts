@@ -7,6 +7,7 @@ import type { EmbeddingAdapter } from "../adapters/embeddings.js";
 import type { PlanningAssistant } from "../adapters/groq.js";
 import type { ArtifactManager } from "../core/artifacts.js";
 import type { MemoryStorage } from "../storage/types.js";
+import { canonicalizePath } from "../utils/paths.js";
 import type { BriefSource, MemoryOwnerType, PlanBrief, PlanOutput, TaskType } from "../types.js";
 
 export interface PlanServiceDeps {
@@ -15,6 +16,7 @@ export interface PlanServiceDeps {
     embedder?: EmbeddingAdapter;
     artifactManager: ArtifactManager;
     projectId: string;
+    rootDir: string;
     ownerType?: MemoryOwnerType;
     ownerId?: string;
     now?: () => Date;
@@ -65,8 +67,16 @@ export class PlanService {
         const ai = await this.deps.assistant.analyzePlan(request.prompt);
 
         const taskType = ai?.taskType ?? fallback.taskType;
-        const scope = unique([...(ai?.scope ?? []), ...fallback.scope]).slice(0, 10);
-        const keywords = unique([...(ai?.keywords ?? []), ...fallback.keywords]).slice(0, 16);
+        const rawScope = unique([...(ai?.scope ?? []), ...fallback.scope]).slice(0, 10);
+        const rawKeywords = unique([...(ai?.keywords ?? []), ...fallback.keywords]).slice(0, 16);
+
+        const scope = rawScope.map((s) =>
+            looksLikeFilePath(s) ? canonicalizePath(s, this.deps.rootDir) : s
+        );
+        const keywords = rawKeywords.map((k) =>
+            looksLikeFilePath(k) ? canonicalizePath(k, this.deps.rootDir) : k
+        );
+
         const retrievalText = unique([request.prompt, ...scope, ...keywords]).join("\n");
         const embedding = await this.deps.embedder?.embedText(retrievalText);
         const verificationPlan = unique([

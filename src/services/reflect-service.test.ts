@@ -38,7 +38,15 @@ const assistant: PlanningAssistant = {
             }
         ]
     }),
-    extractMemoryScenes: async ({ text }) => [{ label: "Route normalization", content: text }]
+    extractMemoryScenes: async ({ text }) => [{ label: "Route normalization", content: text }],
+    summarizeArtifacts: async ({ files }) =>
+        files.map((f) => ({
+            filePath: f.filePath,
+            moduleName: "routes.ts",
+            summary: "Normalized route keys.",
+            scope: ["src/api/routes.ts"],
+            confidence: 0.9
+        }))
 };
 
 const semanticDuplicateAssistant: PlanningAssistant = {
@@ -77,7 +85,15 @@ const semanticDuplicateAssistant: PlanningAssistant = {
             ]
         };
     },
-    extractMemoryScenes: async ({ text }) => [{ label: "Route normalization", content: text }]
+    extractMemoryScenes: async ({ text }) => [{ label: "Route normalization", content: text }],
+    summarizeArtifacts: async ({ files }) =>
+        files.map((f) => ({
+            filePath: f.filePath,
+            moduleName: "routes.ts",
+            summary: "Normalized route keys.",
+            scope: ["src/api/routes.ts"],
+            confidence: 0.9
+        }))
 };
 
 const routeEmbeddingAdapter: EmbeddingAdapter = {
@@ -116,13 +132,15 @@ describe("integration: reflect", () => {
                 storage,
                 assistant,
                 artifactManager,
-                projectId: "default"
+                projectId: "default",
+                rootDir: root
             });
             const reflectService = new ReflectService({
                 storage,
                 assistant,
                 artifactManager,
-                projectId: "default"
+                projectId: "default",
+                rootDir: root
             });
 
             const planJson = await executePlanCommand(planService, {
@@ -176,7 +194,8 @@ describe("integration: reflect", () => {
                     storage: storageNoArtifact,
                     assistant,
                     artifactManager: new ArtifactManager(rootNoArtifact),
-                    projectId: "default"
+                    projectId: "default",
+                    rootDir: rootNoArtifact
                 });
 
                 await executeReflectCommand(reflectNoArtifact, {
@@ -211,14 +230,16 @@ describe("integration: reflect", () => {
                 assistant: semanticDuplicateAssistant,
                 embedder: routeEmbeddingAdapter,
                 artifactManager,
-                projectId: "default"
+                projectId: "default",
+                rootDir: root
             });
             const reflectService = new ReflectService({
                 storage,
                 assistant: semanticDuplicateAssistant,
                 embedder: routeEmbeddingAdapter,
                 artifactManager,
-                projectId: "default"
+                projectId: "default",
+                rootDir: root
             });
 
             const planJson = await executePlanCommand(planService, {

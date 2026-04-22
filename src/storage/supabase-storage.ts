@@ -627,4 +627,19 @@ export class SupabaseStorageAdapter implements MemoryStorage {
 
         return (data ?? []).map((row) => mapMemoryEmbedding(row as JsonObject));
     }
+
+    async deleteMemoryEmbeddingsForSource(
+        sourceType: "lesson" | "knowledge" | "artifact",
+        sourceId: string
+    ): Promise<void> {
+        const { error } = await this.client
+            .from("memory_embeddings")
+            .delete()
+            .eq("source_type", sourceType)
+            .eq("source_id", sourceId);
+
+        if (error) {
+            throw new Error(`Supabase deleteMemoryEmbeddingsForSource failed: ${error.message}`);
+        }
+    }
 }

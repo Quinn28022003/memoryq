@@ -14,6 +14,7 @@ export function createCliContext(rootDir: string = process.cwd()) {
     const ownerId = process.env.MEMORYQ_OWNER_ID || projectId;
 
     return {
+        rootDir,
         projectId,
         ownerType,
         ownerId,

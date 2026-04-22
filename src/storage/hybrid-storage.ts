@@ -183,6 +183,17 @@ export class HybridStorage implements MemoryStorage {
             () => this.local.upsertMemoryEmbeddings(entries)
         );
     }
+
+    async deleteMemoryEmbeddingsForSource(
+        sourceType: "lesson" | "knowledge" | "artifact",
+        sourceId: string
+    ): Promise<void> {
+        const primary = this.primary;
+        await this.withFallback(
+            primary ? () => primary.deleteMemoryEmbeddingsForSource(sourceType, sourceId) : null,
+            () => this.local.deleteMemoryEmbeddingsForSource(sourceType, sourceId)
+        );
+    }
 }
 
 export function createHybridStorageFromEnv(rootDir: string = process.cwd()): HybridStorage {
