@@ -9,7 +9,7 @@ const taskTypeSchema = z.enum([
     "infra",
     "general"
 ]);
-const sourceTypeSchema = z.enum(["lesson", "knowledge", "artifact"]);
+const sourceTypeSchema = z.enum(["lesson", "knowledge", "artifact", "source_chunk"]);
 const lessonSeveritySchema = z.enum(["low", "medium", "high"]);
 const storageModeSchema = z.enum(["supabase", "local-fallback"]);
 

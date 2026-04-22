@@ -21,6 +21,7 @@ import type {
     MemoryEmbeddingRecord,
     ProjectKnowledgeRecord,
     ProjectLessonRecord,
+    SourceType,
     StorageMode
 } from "../types.js";
 
@@ -173,18 +174,37 @@ export class LocalStorageAdapter implements MemoryStorage {
                   ownerId: query.ownerId,
                   sourceType: "lesson",
                   embedding: query.embedding,
-                  limit: query.limit,
+                  limit: query.limit * 2, // Query more to allow for grouping
                   threshold: 0.1
               })
             : [];
 
         if (matchedMemory.length > 0) {
-            const ids = matchedMemory.map((memory) => memory.sourceId);
+            // Group by parentKey and pick the best (first) one
+            const bestPerParent = new Map<string, MemoryEmbeddingRecord>();
+            const finalMemory: MemoryEmbeddingRecord[] = [];
+
+            for (const memory of matchedMemory) {
+                const parentKey = memory.metadata?.parentKey as string | undefined;
+                if (parentKey) {
+                    if (!bestPerParent.has(parentKey)) {
+                        bestPerParent.set(parentKey, memory);
+                        finalMemory.push(memory);
+                    }
+                } else {
+                    finalMemory.push(memory);
+                }
+
+                if (finalMemory.length >= query.limit) {
+                    break;
+                }
+            }
+
+            const ids = finalMemory.map((memory) => memory.sourceId);
             const order = new Map(ids.map((id, index) => [id, index]));
             const matchedLessons = lessons
                 .filter((lesson) => order.has(lesson.id))
-                .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-                .slice(0, query.limit);
+                .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
 
             if (matchedLessons.length > 0) {
                 return matchedLessons;
@@ -235,18 +255,37 @@ export class LocalStorageAdapter implements MemoryStorage {
                   ownerId: query.ownerId,
                   sourceType: "knowledge",
                   embedding: query.embedding,
-                  limit: query.limit,
+                  limit: query.limit * 2, // Query more to allow for grouping
                   threshold: 0.1
               })
             : [];
 
         if (matchedMemory.length > 0) {
-            const ids = matchedMemory.map((memory) => memory.sourceId);
+            // Group by parentKey and pick the best (first) one
+            const bestPerParent = new Map<string, MemoryEmbeddingRecord>();
+            const finalMemory: MemoryEmbeddingRecord[] = [];
+
+            for (const memory of matchedMemory) {
+                const parentKey = memory.metadata?.parentKey as string | undefined;
+                if (parentKey) {
+                    if (!bestPerParent.has(parentKey)) {
+                        bestPerParent.set(parentKey, memory);
+                        finalMemory.push(memory);
+                    }
+                } else {
+                    finalMemory.push(memory);
+                }
+
+                if (finalMemory.length >= query.limit) {
+                    break;
+                }
+            }
+
+            const ids = finalMemory.map((memory) => memory.sourceId);
             const order = new Map(ids.map((id, index) => [id, index]));
             const matchedNotes = notes
                 .filter((note) => order.has(note.id))
-                .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-                .slice(0, query.limit);
+                .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
 
             if (matchedNotes.length > 0) {
                 return matchedNotes;
@@ -577,10 +616,7 @@ export class LocalStorageAdapter implements MemoryStorage {
         return result;
     }
 
-    async deleteMemoryEmbeddingsForSource(
-        sourceType: "lesson" | "knowledge" | "artifact",
-        sourceId: string
-    ): Promise<void> {
+    async deleteMemoryEmbeddingsForSource(sourceType: SourceType, sourceId: string): Promise<void> {
         const rows = await this.loadTable<MemoryEmbeddingRecord>("memory_embeddings");
         const filtered = rows.filter(
             (row) => row.sourceType !== sourceType || row.sourceId !== sourceId

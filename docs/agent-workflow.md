@@ -16,6 +16,9 @@ memoryq plan --prompt "<verbatim user prompt>" --format json
 
 `plan` performs intent classification, creates a retrieval embedding with Groq, queries Supabase `memory_embeddings`, hydrates relevant lessons/knowledge/artifacts, creates a verification checklist, stores an `execution_runs` record, and returns a memory brief.
 
+The initial `plan` call is only the minimum required call. Agents may call `memoryq plan` again at
+any point during the task when new ambiguity, risk, or an architectural decision appears.
+
 Important fields:
 
 - `runId`: required for `reflect`
@@ -25,6 +28,24 @@ Important fields:
 - `verificationPlan`: checks/tests the agent should run when applicable
 - `sources`: memory records used for the brief
 - `storageMode`: `supabase` means real shared memory was used; `local-fallback` means local memory was used
+
+## Uncertainty Gate
+
+Agents must not guess through unclear work. If the task, implementation path, target file, data
+model, command, migration, or expected behavior is unclear, the required order is:
+
+This gate applies throughout the working session, including after implementation has started.
+
+1. Re-read the `memoryq plan` output and inspect relevant local files.
+2. If still unclear, run a second focused `memoryq plan` prompt that names the ambiguity.
+3. Apply the second brief's `knownMistakes`, `architectureNotes`, `filesToInspect`, and
+   `verificationPlan`.
+4. If MemoryQ still lacks enough reliable guidance, ask the user to confirm before taking the
+   risky or ambiguous action.
+
+This gate is mandatory for choices that could cause wrong architecture, data loss, broken
+migrations, public API changes, security regressions, overwritten user work, or large refactors.
+All run IDs created during uncertainty resolution should be recorded in the reflection result file.
 
 ## Reflect Command
 
@@ -67,9 +88,11 @@ memoryq seed caveman --format json
 
 This imports a broad, self-contained catalog of Caveman-derived token and context optimization
 memory, including compression boundaries, review and commit rules, hook behavior, agent
-integrations, benchmark notes, and safety constraints. It is idempotent and can be run multiple
-times safely. The catalog is generated from Caveman during MemoryQ development, but normal seeding
-does not require the `caveman/` source directory to exist.
+integrations, benchmark notes, and safety constraints. It also stores the canonical raw Caveman
+skill source plus heading-based source chunks for preview, highlighting, and source-chunk
+embeddings. It is idempotent and can be run multiple times safely. The catalog is generated from
+Caveman during MemoryQ development, but normal seeding does not require the `caveman/` source
+directory to exist.
 
 During MemoryQ development, `npm run import:caveman-memory` rebuilds that self-contained catalog
 and then runs the same Caveman seed path. Use `npm run import:caveman-memory -- --no-seed` for a
@@ -116,7 +139,7 @@ Embeddings live in `memory_embeddings`:
 - `project_id`: target project namespace
 - `owner_type`: `project`, `agent`, or `user`
 - `owner_id`: owner identity within the project
-- `source_type`: `lesson`, `knowledge`, or `artifact`
+- `source_type`: `lesson`, `knowledge`, `artifact`, or `source_chunk`
 - `source_id`: source record ID
 - `chunk_index`: scene order for that source
 - `scene_label`: model-created scene title

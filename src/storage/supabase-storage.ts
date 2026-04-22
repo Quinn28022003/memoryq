@@ -20,6 +20,7 @@ import type {
     MemoryOwnerType,
     ProjectKnowledgeRecord,
     ProjectLessonRecord,
+    SourceType,
     StorageMode,
     TaskType
 } from "../types.js";
@@ -266,12 +267,32 @@ export class SupabaseStorageAdapter implements MemoryStorage {
                 ownerId: query.ownerId,
                 sourceType: "lesson",
                 embedding: query.embedding,
-                limit: query.limit,
+                limit: query.limit * 2, // Query more to allow for grouping
                 threshold: 0.1
             });
 
             if (matchedMemory.length > 0) {
-                const ids = matchedMemory.map((memory) => memory.sourceId);
+                // Group by parentKey and pick the best (first) one
+                const bestPerParent = new Map<string, MemoryEmbeddingRecord>();
+                const finalMemory: MemoryEmbeddingRecord[] = [];
+
+                for (const memory of matchedMemory) {
+                    const parentKey = memory.metadata?.parentKey as string | undefined;
+                    if (parentKey) {
+                        if (!bestPerParent.has(parentKey)) {
+                            bestPerParent.set(parentKey, memory);
+                            finalMemory.push(memory);
+                        }
+                    } else {
+                        finalMemory.push(memory);
+                    }
+
+                    if (finalMemory.length >= query.limit) {
+                        break;
+                    }
+                }
+
+                const ids = finalMemory.map((memory) => memory.sourceId);
                 const { data, error } = await this.client
                     .from("project_lessons")
                     .select("*")
@@ -281,8 +302,7 @@ export class SupabaseStorageAdapter implements MemoryStorage {
                     const order = new Map(ids.map((id, index) => [id, index]));
                     const matched = data
                         .map((row) => mapLesson(row as JsonObject))
-                        .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-                        .slice(0, query.limit);
+                        .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
 
                     if (matched.length > 0) {
                         const lessonIds = matched.map((item) => item.id);
@@ -341,12 +361,32 @@ export class SupabaseStorageAdapter implements MemoryStorage {
                 ownerId: query.ownerId,
                 sourceType: "knowledge",
                 embedding: query.embedding,
-                limit: query.limit,
+                limit: query.limit * 2, // Query more to allow for grouping
                 threshold: 0.1
             });
 
             if (matchedMemory.length > 0) {
-                const ids = matchedMemory.map((memory) => memory.sourceId);
+                // Group by parentKey and pick the best (first) one
+                const bestPerParent = new Map<string, MemoryEmbeddingRecord>();
+                const finalMemory: MemoryEmbeddingRecord[] = [];
+
+                for (const memory of matchedMemory) {
+                    const parentKey = memory.metadata?.parentKey as string | undefined;
+                    if (parentKey) {
+                        if (!bestPerParent.has(parentKey)) {
+                            bestPerParent.set(parentKey, memory);
+                            finalMemory.push(memory);
+                        }
+                    } else {
+                        finalMemory.push(memory);
+                    }
+
+                    if (finalMemory.length >= query.limit) {
+                        break;
+                    }
+                }
+
+                const ids = finalMemory.map((memory) => memory.sourceId);
                 const { data, error } = await this.client
                     .from("project_knowledge")
                     .select("*")
@@ -356,8 +396,7 @@ export class SupabaseStorageAdapter implements MemoryStorage {
                     const order = new Map(ids.map((id, index) => [id, index]));
                     const matched = data
                         .map((row) => mapKnowledge(row as JsonObject))
-                        .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-                        .slice(0, query.limit);
+                        .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
 
                     if (matched.length > 0) {
                         return matched;
@@ -628,10 +667,7 @@ export class SupabaseStorageAdapter implements MemoryStorage {
         return (data ?? []).map((row) => mapMemoryEmbedding(row as JsonObject));
     }
 
-    async deleteMemoryEmbeddingsForSource(
-        sourceType: "lesson" | "knowledge" | "artifact",
-        sourceId: string
-    ): Promise<void> {
+    async deleteMemoryEmbeddingsForSource(sourceType: SourceType, sourceId: string): Promise<void> {
         const { error } = await this.client
             .from("memory_embeddings")
             .delete()

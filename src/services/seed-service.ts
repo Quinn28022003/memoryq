@@ -16,6 +16,7 @@ export interface SeedServiceDeps {
     projectId: string;
     ownerType?: MemoryOwnerType;
     ownerId?: string;
+    rootDir?: string;
     now?: () => Date;
 }
 
@@ -40,10 +41,6 @@ export class SeedService {
         const knowledgeRecords = CAVEMAN_MEMORY_RECORDS.filter(
             (record) => record.kind === "knowledge"
         );
-        const lessonMetadataByKey = new Map(lessonRecords.map((record) => [record.key, record]));
-        const knowledgeMetadataByText = new Map(
-            knowledgeRecords.map((record) => [record.text.toLowerCase(), record])
-        );
 
         await this.deps.storage.createExecutionRun({
             id: runId,
@@ -53,7 +50,7 @@ export class SeedService {
             scope: ["token-management", "context-management", "caveman"],
             status: "completed",
             briefPayload: null,
-            resultSummary: "Seeded broad Caveman-derived lessons, knowledge, and source metadata."
+            resultSummary: "Seeded broad Caveman-derived lessons and knowledge."
         });
 
         const lessonsToInsert: LessonInsert[] = lessonRecords.map((record) => ({
@@ -84,15 +81,13 @@ export class SeedService {
             const embeddingEntries: MemoryEmbeddingUpsert[] = [];
 
             for (const lesson of seededLessons) {
-                const source = lesson.lessonKey
-                    ? lessonMetadataByKey.get(lesson.lessonKey)
-                    : undefined;
+                const record = CAVEMAN_MEMORY_RECORDS.find((r) => r.key === lesson.lessonKey);
                 const embeddingContent = [
-                    source ? `Source: ${source.sourcePath}` : undefined,
-                    lesson.lessonText
-                ]
-                    .filter(Boolean)
-                    .join("\n");
+                    `Lesson: ${lesson.lessonText}`,
+                    `Scope: ${lesson.scope.join(", ")}`,
+                    `Task: ${lesson.taskType}`
+                ].join("\n");
+
                 const embedding = await this.deps.embedder.embedText(embeddingContent);
                 embeddingEntries.push({
                     projectId: this.deps.projectId,
@@ -101,28 +96,31 @@ export class SeedService {
                     sourceType: "lesson",
                     sourceId: lesson.id,
                     chunkIndex: 0,
-                    sceneLabel: source ? source.key : "lesson",
+                    sceneLabel: lesson.lessonKey || "lesson",
                     content: embeddingContent,
                     scope: lesson.scope,
                     taskType: lesson.taskType,
                     confidence: lesson.confidence,
                     embedding,
                     metadata: {
-                        key: source?.key ?? lesson.lessonKey,
-                        sourcePath: source?.sourcePath,
-                        seedRunId: runId
+                        key: lesson.lessonKey,
+                        seedRunId: runId,
+                        parentKey: record?.parentKey,
+                        conceptKey: record?.conceptKey
                     }
                 });
             }
 
             for (const knowledge of seededKnowledge) {
-                const source = knowledgeMetadataByText.get(knowledge.noteText.toLowerCase());
+                const record = CAVEMAN_MEMORY_RECORDS.find(
+                    (r) => r.kind === "knowledge" && r.text === knowledge.noteText
+                );
                 const embeddingContent = [
-                    source ? `Source: ${source.sourcePath}` : undefined,
-                    knowledge.noteText
-                ]
-                    .filter(Boolean)
-                    .join("\n");
+                    `Knowledge: ${knowledge.noteText}`,
+                    `Type: ${knowledge.noteType}`,
+                    `Scope: ${knowledge.scope.join(", ")}`
+                ].join("\n");
+
                 const embedding = await this.deps.embedder.embedText(embeddingContent);
                 embeddingEntries.push({
                     projectId: this.deps.projectId,
@@ -131,17 +129,17 @@ export class SeedService {
                     sourceType: "knowledge",
                     sourceId: knowledge.id,
                     chunkIndex: 0,
-                    sceneLabel: source ? source.key : "knowledge",
+                    sceneLabel: "knowledge",
                     content: embeddingContent,
                     scope: knowledge.scope,
                     taskType: null,
                     confidence: knowledge.confidence,
                     embedding,
                     metadata: {
-                        key: source?.key,
-                        sourcePath: source?.sourcePath,
                         seedRunId: runId,
-                        noteType: knowledge.noteType
+                        noteType: knowledge.noteType,
+                        parentKey: record?.parentKey,
+                        conceptKey: record?.conceptKey
                     }
                 });
             }

@@ -14,13 +14,14 @@ import type { PlanningAssistant } from "../adapters/groq.js";
 import type { ArtifactManager } from "../core/artifacts.js";
 import type {
     ArtifactSummaryUpsert,
+    KnowledgeUpsert,
+    LessonInsert,
     MemoryEmbeddingUpsert,
     MemoryStorage
 } from "../storage/types.js";
 import { canonicalizePath } from "../utils/paths.js";
 import type {
     EmbeddingVector,
-    MemoryEmbeddingRecord,
     MemoryOwnerType,
     MemoryScene,
     NormalizedLesson,
@@ -54,7 +55,9 @@ export interface ReflectResponse {
     markdown: string;
 }
 
-const SEMANTIC_DUPLICATE_THRESHOLD = 0.88;
+const SEMANTIC_QUERY_THRESHOLD = 0.82;
+const SEMANTIC_MATCH_THRESHOLD = 0.92;
+const SEMANTIC_EXACT_THRESHOLD = 0.97;
 
 function unique(values: string[]): string[] {
     return [...new Set(values.filter(Boolean))];
@@ -160,12 +163,12 @@ export class ReflectService {
         const embeddings = await Promise.all(
             scenes.map((scene) =>
                 this.deps.embedder?.embedText(
-                    unique([
-                        scene.label,
-                        scene.content,
-                        ...input.scope,
-                        input.taskType ?? input.sourceType
-                    ]).join("\n")
+                    [
+                        `Label: ${scene.label}`,
+                        `Content: ${scene.content}`,
+                        `Scope: ${unique(input.scope).join(", ")}`,
+                        `Context: ${input.taskType ?? input.sourceType}`
+                    ].join("\n")
                 )
             )
         );
@@ -176,38 +179,70 @@ export class ReflectService {
         });
     }
 
-    private hasAcceptedSemanticDuplicate(
-        candidateEmbeddings: EmbeddingVector[],
-        acceptedEmbeddings: EmbeddingVector[]
-    ): boolean {
-        return candidateEmbeddings.some((candidate) =>
-            acceptedEmbeddings.some(
-                (accepted) => cosineSimilarity(candidate, accepted) >= SEMANTIC_DUPLICATE_THRESHOLD
-            )
-        );
-    }
-
-    private async findPersistedSemanticDuplicate(input: {
+    private async checkSemanticDuplicate(input: {
         sourceType: SourceType;
-        embeddings: EmbeddingVector[];
-    }): Promise<MemoryEmbeddingRecord | null> {
-        for (const embedding of input.embeddings) {
-            const matches = await this.deps.storage.queryMemoryEmbeddings({
-                projectId: this.deps.projectId,
-                ownerType: this.deps.ownerType ?? "project",
-                ownerId: this.deps.ownerId ?? this.deps.projectId,
-                sourceType: input.sourceType,
-                embedding,
-                limit: 1,
-                threshold: SEMANTIC_DUPLICATE_THRESHOLD
-            });
+        text: string;
+        scope: string[];
+        taskType: TaskType | null;
+        typeMetadata?: string;
+        acceptedEmbeddings: EmbeddingVector[];
+    }): Promise<{ isDuplicate: boolean; embedding?: EmbeddingVector }> {
+        if (!this.deps.embedder) {
+            return { isDuplicate: false };
+        }
 
-            if (matches.length > 0) {
-                return matches[0];
+        const canonicalText = [
+            `Type: ${input.sourceType}`,
+            `Text: ${input.text}`,
+            `Scope: ${unique(input.scope).join(", ")}`,
+            `Task: ${input.taskType ?? "general"}`,
+            input.typeMetadata ? `Meta: ${input.typeMetadata}` : ""
+        ]
+            .filter(Boolean)
+            .join("\n");
+
+        const embedding = await this.deps.embedder.embedText(canonicalText);
+        if (!embedding) {
+            return { isDuplicate: false };
+        }
+
+        // Within-batch check
+        for (const accepted of input.acceptedEmbeddings) {
+            if (cosineSimilarity(embedding, accepted) >= SEMANTIC_MATCH_THRESHOLD) {
+                return { isDuplicate: true, embedding };
             }
         }
 
-        return null;
+        // Persistent check
+        const matches = await this.deps.storage.queryMemoryEmbeddings({
+            projectId: this.deps.projectId,
+            ownerType: this.deps.ownerType ?? "project",
+            ownerId: this.deps.ownerId ?? this.deps.projectId,
+            sourceType: input.sourceType,
+            embedding,
+            limit: 5,
+            threshold: SEMANTIC_QUERY_THRESHOLD
+        });
+
+        for (const match of matches) {
+            const similarity = cosineSimilarity(embedding, match.embedding);
+
+            if (similarity >= SEMANTIC_EXACT_THRESHOLD) {
+                return { isDuplicate: true, embedding };
+            }
+
+            if (similarity >= SEMANTIC_MATCH_THRESHOLD) {
+                // Compatible context check: shared task or significant scope overlap
+                const sameTask = match.taskType === input.taskType;
+                const scopeOverlap = input.scope.some((s) => match.scope.includes(s));
+
+                if (sameTask || scopeOverlap) {
+                    return { isDuplicate: true, embedding };
+                }
+            }
+        }
+
+        return { isDuplicate: false, embedding };
     }
 
     private async createMemoryEmbeddings(input: {
@@ -288,112 +323,121 @@ export class ReflectService {
         ).slice(0, 8);
 
         const newLessons: NormalizedLesson[] = [];
-        const updatedKnowledge = candidateKnowledge;
+        const updatedKnowledge: string[] = [];
         const shouldPersist =
-            requestedPersist && (candidateLessons.length > 0 || updatedKnowledge.length > 0);
+            requestedPersist && (candidateLessons.length > 0 || candidateKnowledge.length > 0);
 
         if (shouldPersist && candidateLessons.length > 0) {
-            // Embed all candidate lessons to check for semantic duplicates and for storage
-            const lessonsWithEmbeddings = await Promise.all(
-                candidateLessons.map(async (lesson) => {
-                    const sceneEmbeddings = await this.embedScenes({
-                        sourceType: "lesson",
-                        text: lesson.lessonText,
-                        scope: lesson.scope,
-                        taskType: lesson.taskType
-                    });
-                    return {
-                        ...lesson,
-                        embedding: sceneEmbeddings[0]?.embedding
-                    };
-                })
-            );
+            const acceptedLessonEmbeddings: EmbeddingVector[] = [];
+            const lessonsToUpsert: LessonInsert[] = [];
 
-            // Prepare for upsert and identify truly new lessons for the output
-            const lessonsToUpsert = await Promise.all(
-                lessonsWithEmbeddings.map(async (lesson) => {
-                    if (lesson.embedding) {
-                        const duplicate = await this.findPersistedSemanticDuplicate({
+            for (const lesson of candidateLessons) {
+                const { isDuplicate, embedding } = await this.checkSemanticDuplicate({
+                    sourceType: "lesson",
+                    text: lesson.lessonText,
+                    scope: lesson.scope,
+                    taskType: lesson.taskType,
+                    acceptedEmbeddings: acceptedLessonEmbeddings
+                });
+
+                if (isDuplicate) {
+                    continue;
+                }
+
+                if (embedding) {
+                    acceptedLessonEmbeddings.push(embedding);
+                }
+
+                newLessons.push(lesson);
+                lessonsToUpsert.push({
+                    ...lesson,
+                    projectId: this.deps.projectId,
+                    sourceRunId: run.id
+                });
+            }
+
+            if (lessonsToUpsert.length > 0) {
+                const upsertedLessons = await this.deps.storage.upsertLessons(lessonsToUpsert);
+
+                const memoryEntries = await Promise.all(
+                    upsertedLessons.map((lesson: ProjectLessonRecord) =>
+                        this.createMemoryEmbeddings({
                             sourceType: "lesson",
-                            embeddings: [lesson.embedding]
-                        });
-
-                        if (duplicate) {
-                            return {
-                                ...lesson,
-                                projectId: this.deps.projectId,
-                                sourceRunId: run.id,
-                                lessonKey:
-                                    lesson.lessonKey ||
-                                    (duplicate.metadata?.lessonKey as string) ||
-                                    duplicate.sourceId
-                            };
-                        }
-                    }
-
-                    // If not a duplicate, add to the output.newLessons
-                    newLessons.push(lesson);
-
-                    return {
-                        ...lesson,
-                        projectId: this.deps.projectId,
-                        sourceRunId: run.id
-                    };
-                })
-            );
-
-            const upsertedLessons = await this.deps.storage.upsertLessons(lessonsToUpsert);
-
-            // Persist memory embeddings for search (chunked scenes)
-            const memoryEntries = await Promise.all(
-                upsertedLessons.map((lesson: ProjectLessonRecord) =>
-                    this.createMemoryEmbeddings({
-                        sourceType: "lesson",
-                        sourceId: lesson.id,
-                        text: lesson.lessonText,
-                        scope: lesson.scope,
-                        taskType: lesson.taskType,
-                        confidence: lesson.confidence,
-                        metadata: {
-                            severity: lesson.severity,
-                            sourceRunId: lesson.sourceRunId,
-                            lessonKey: lesson.lessonKey
-                        }
-                    })
-                )
-            );
-            await this.persistMemoryEmbeddings(memoryEntries.flat());
+                            sourceId: lesson.id,
+                            text: lesson.lessonText,
+                            scope: lesson.scope,
+                            taskType: lesson.taskType,
+                            confidence: lesson.confidence,
+                            metadata: {
+                                severity: lesson.severity,
+                                sourceRunId: lesson.sourceRunId,
+                                lessonKey: lesson.lessonKey
+                            }
+                        })
+                    )
+                );
+                await this.persistMemoryEmbeddings(memoryEntries.flat());
+            }
         } else if (!shouldPersist) {
             newLessons.push(...candidateLessons);
         }
 
-        if (shouldPersist && updatedKnowledge.length > 0) {
-            const upsertedKnowledge = await this.deps.storage.upsertKnowledge(
-                updatedKnowledge.map((note) => ({
+        if (shouldPersist && candidateKnowledge.length > 0) {
+            const acceptedKnowledgeEmbeddings: EmbeddingVector[] = [];
+            const knowledgeToUpsert: KnowledgeUpsert[] = [];
+
+            for (const note of candidateKnowledge) {
+                const noteType = classifyKnowledgeType(note);
+                const { isDuplicate, embedding } = await this.checkSemanticDuplicate({
+                    sourceType: "knowledge",
+                    text: note,
+                    scope: run.scope,
+                    taskType: run.taskType,
+                    typeMetadata: noteType,
+                    acceptedEmbeddings: acceptedKnowledgeEmbeddings
+                });
+
+                if (isDuplicate) {
+                    continue;
+                }
+
+                if (embedding) {
+                    acceptedKnowledgeEmbeddings.push(embedding);
+                }
+
+                updatedKnowledge.push(note);
+                knowledgeToUpsert.push({
                     projectId: this.deps.projectId,
-                    noteType: classifyKnowledgeType(note),
+                    noteType,
                     noteText: note,
                     scope: run.scope,
                     confidence
-                }))
-            );
-            const memoryEntries = await Promise.all(
-                upsertedKnowledge.map((note: ProjectKnowledgeRecord) =>
-                    this.createMemoryEmbeddings({
-                        sourceType: "knowledge",
-                        sourceId: note.id,
-                        text: note.noteText,
-                        scope: note.scope,
-                        taskType: run.taskType,
-                        confidence: note.confidence,
-                        metadata: {
-                            noteType: note.noteType,
-                            sourceRunId: run.id
-                        }
-                    })
-                )
-            );
-            await this.persistMemoryEmbeddings(memoryEntries.flat());
+                });
+            }
+
+            if (knowledgeToUpsert.length > 0) {
+                const upsertedKnowledge =
+                    await this.deps.storage.upsertKnowledge(knowledgeToUpsert);
+                const memoryEntries = await Promise.all(
+                    upsertedKnowledge.map((note: ProjectKnowledgeRecord) =>
+                        this.createMemoryEmbeddings({
+                            sourceType: "knowledge",
+                            sourceId: note.id,
+                            text: note.noteText,
+                            scope: note.scope,
+                            taskType: run.taskType,
+                            confidence: note.confidence,
+                            metadata: {
+                                noteType: note.noteType,
+                                sourceRunId: run.id
+                            }
+                        })
+                    )
+                );
+                await this.persistMemoryEmbeddings(memoryEntries.flat());
+            }
+        } else if (!shouldPersist) {
+            updatedKnowledge.push(...candidateKnowledge);
         }
 
         const rawFiles = unique(run.briefPayload?.filesToInspect ?? []).slice(0, 10);

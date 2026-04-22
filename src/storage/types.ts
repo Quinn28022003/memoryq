@@ -10,6 +10,7 @@ import type {
     ProjectKnowledgeRecord,
     ProjectLessonRecord,
     RunStatus,
+    SourceType,
     StorageMode,
     TaskType
 } from "../types.js";
@@ -88,7 +89,7 @@ export interface MemoryEmbeddingUpsert {
     projectId: string;
     ownerType: MemoryOwnerType;
     ownerId: string;
-    sourceType: "lesson" | "knowledge" | "artifact";
+    sourceType: SourceType;
     sourceId: string;
     chunkIndex: number;
     sceneLabel: string;
@@ -104,7 +105,7 @@ export interface MemoryEmbeddingQuery {
     projectId: string;
     ownerType?: MemoryOwnerType;
     ownerId?: string;
-    sourceType: "lesson" | "knowledge" | "artifact";
+    sourceType: SourceType;
     taskType?: TaskType;
     embedding: EmbeddingVector;
     limit: number;
@@ -126,8 +127,5 @@ export interface MemoryStorage {
     upsertKnowledge(notes: KnowledgeUpsert[]): Promise<ProjectKnowledgeRecord[]>;
     upsertArtifactSummaries(entries: ArtifactSummaryUpsert[]): Promise<CodeArtifactSummaryRecord[]>;
     upsertMemoryEmbeddings(entries: MemoryEmbeddingUpsert[]): Promise<MemoryEmbeddingRecord[]>;
-    deleteMemoryEmbeddingsForSource(
-        sourceType: "lesson" | "knowledge" | "artifact",
-        sourceId: string
-    ): Promise<void>;
+    deleteMemoryEmbeddingsForSource(sourceType: SourceType, sourceId: string): Promise<void>;
 }

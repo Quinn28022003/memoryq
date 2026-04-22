@@ -47,6 +47,9 @@ function failingStorage(): MemoryStorage {
         },
         upsertMemoryEmbeddings: async () => {
             throw new Error("supabase unavailable");
+        },
+        deleteMemoryEmbeddingsForSource: async () => {
+            throw new Error("supabase unavailable");
         }
     };
 }

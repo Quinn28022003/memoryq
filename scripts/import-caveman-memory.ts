@@ -100,14 +100,6 @@ async function pathExists(path: string): Promise<boolean> {
     }
 }
 
-function sourcePathToRepoPath(sourcePath: string): string {
-    if (sourcePath.startsWith("caveman://")) {
-        return `caveman/${sourcePath.slice("caveman://".length)}`;
-    }
-
-    return sourcePath;
-}
-
 function repoPathToSourceLabel(sourcePath: string): string {
     return sourcePath.startsWith("caveman/")
         ? `caveman://${sourcePath.slice("caveman/".length)}`
@@ -174,7 +166,11 @@ function categoryPresent(category: string, records: CavemanMemoryRecord[]): bool
             case "commit":
                 return key.startsWith("caveman.commit.") || scope.includes("commit");
             case "benchmarks":
-                return key.startsWith("caveman.benchmarks.") || scope.includes("benchmark");
+                return (
+                    key.startsWith("caveman.benchmarks.") ||
+                    key.startsWith("caveman.benchmark.") ||
+                    scope.includes("benchmark")
+                );
             default:
                 return key.startsWith(`caveman.${category}.`) || scope.includes(category);
         }
@@ -187,8 +183,10 @@ function renderRecord(record: CavemanMemoryRecord): string {
         `kind: ${quote(record.kind)}`,
         `text: ${quote(record.text)}`,
         `scope: [${record.scope.map(quote).join(", ")}]`,
-        `taskType: ${quote(record.taskType)}`
-    ];
+        `taskType: ${quote(record.taskType)}`,
+        record.parentKey ? `parentKey: ${quote(record.parentKey)}` : "",
+        record.conceptKey ? `conceptKey: ${quote(record.conceptKey)}` : ""
+    ].filter(Boolean);
 
     const specific =
         record.kind === "lesson"
@@ -197,12 +195,8 @@ function renderRecord(record: CavemanMemoryRecord): string {
 
     return [
         "    {",
-        [
-            ...common,
-            ...specific,
-            `confidence: ${record.confidence}`,
-            `sourcePath: ${quote(record.sourcePath)}`
-        ]
+        [...common, ...specific, `confidence: ${record.confidence}`]
+            .filter(Boolean)
             .map((line) => `        ${line}`)
             .join(",\n"),
         "    }"
@@ -219,7 +213,8 @@ interface BaseCavemanMemoryRecord {
     scope: string[];
     taskType: TaskType;
     confidence: number;
-    sourcePath: string;
+    parentKey?: string;
+    conceptKey?: string;
 }
 
 export interface CavemanLessonMemoryRecord extends BaseCavemanMemoryRecord {
@@ -301,22 +296,6 @@ export async function auditCavemanMemoryCatalog(
         }
     }
 
-    const coveredSourceLabels = [
-        ...new Set(CAVEMAN_MEMORY_RECORDS.map((record) => record.sourcePath))
-    ].sort();
-    const coveredRepoPaths = new Set(coveredSourceLabels.map(sourcePathToRepoPath));
-    const sourceSet = new Set(sourceFiles);
-    const duplicateSet = new Set(duplicateSources.map((source) => source.sourcePath));
-    const missingSourceLabels = sourceAvailable
-        ? coveredSourceLabels.filter(
-              (sourceLabel) => !sourceSet.has(sourcePathToRepoPath(sourceLabel))
-          )
-        : [];
-    const uncoveredSourceFiles = sourceAvailable
-        ? uniqueSourceFiles.filter(
-              (sourcePath) => !coveredRepoPaths.has(sourcePath) && !duplicateSet.has(sourcePath)
-          )
-        : [];
     const presentCategories = CAVEMAN_REQUIRED_CATEGORIES.filter((category) =>
         categoryPresent(category, CAVEMAN_MEMORY_RECORDS)
     );
@@ -329,9 +308,9 @@ export async function auditCavemanMemoryCatalog(
         sourceFiles,
         uniqueSourceFiles,
         duplicateSources,
-        coveredSourceLabels,
-        uncoveredSourceFiles,
-        missingSourceLabels,
+        coveredSourceLabels: [],
+        uncoveredSourceFiles: sourceAvailable ? uniqueSourceFiles : [],
+        missingSourceLabels: [],
         presentCategories,
         missingCategories,
         recordCount: CAVEMAN_MEMORY_RECORDS.length
@@ -350,12 +329,6 @@ export function assertValidCavemanMemoryCatalog(report: CavemanMemoryAuditReport
         );
     }
 
-    if (report.sourceAvailable && report.missingSourceLabels.length > 0) {
-        throw new Error(
-            `Caveman memory records reference missing sources: ${report.missingSourceLabels.join(", ")}`
-        );
-    }
-
     if (report.missingCategories.length > 0) {
         throw new Error(
             `Caveman memory catalog is missing categories: ${report.missingCategories.join(", ")}`
@@ -367,7 +340,6 @@ function renderAuditReport(report: CavemanMemoryAuditReport): string {
     if (!report.sourceAvailable) {
         return [
             "Caveman source directory not found; validated the self-contained catalog only.",
-            `Covered source labels retained in records: ${report.coveredSourceLabels.length}.`,
             `Required categories present: ${report.presentCategories.join(", ")}.`
         ].join("\n");
     }
@@ -376,8 +348,6 @@ function renderAuditReport(report: CavemanMemoryAuditReport): string {
         `Scanned ${report.sourceFiles.length} meaningful source files.`,
         `Unique after content-hash dedupe: ${report.uniqueSourceFiles.length}.`,
         `Ignored duplicate sources: ${report.duplicateSources.length}.`,
-        `Covered source labels: ${report.coveredSourceLabels.length}.`,
-        `Uncovered unique meaningful sources: ${report.uncoveredSourceFiles.length}.`,
         `Required categories present: ${report.presentCategories.join(", ")}.`,
         report.duplicateSources.length > 0
             ? `Duplicate sample: ${report.duplicateSources

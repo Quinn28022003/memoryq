@@ -19,6 +19,7 @@ import type {
     MemoryEmbeddingRecord,
     ProjectKnowledgeRecord,
     ProjectLessonRecord,
+    SourceType,
     StorageMode
 } from "../types.js";
 
@@ -184,10 +185,7 @@ export class HybridStorage implements MemoryStorage {
         );
     }
 
-    async deleteMemoryEmbeddingsForSource(
-        sourceType: "lesson" | "knowledge" | "artifact",
-        sourceId: string
-    ): Promise<void> {
+    async deleteMemoryEmbeddingsForSource(sourceType: SourceType, sourceId: string): Promise<void> {
         const primary = this.primary;
         await this.withFallback(
             primary ? () => primary.deleteMemoryEmbeddingsForSource(sourceType, sourceId) : null,
