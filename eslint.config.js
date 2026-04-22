@@ -4,7 +4,14 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
     {
-        ignores: ["dist/**", "node_modules/**", "coverage/**", ".memoryq/**", "package-lock.json"]
+        ignores: [
+            "dist/**",
+            "node_modules/**",
+            "coverage/**",
+            ".memoryq/**",
+            "package-lock.json",
+            "caveman/**"
+        ]
     },
     eslint.configs.recommended,
     ...tseslint.configs.recommended,

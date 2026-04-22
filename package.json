@@ -19,6 +19,7 @@
         "test:watch": "vitest",
         "memoryq": "node --import tsx src/index.ts",
         "agentmem": "node --import tsx src/index.ts",
+        "import:caveman-memory": "tsx scripts/import-caveman-memory.ts",
         "migrate:up": "cross-env NODE_ENV=development node scripts/migrate.js up",
         "migrate:up:force": "cross-env NODE_ENV=development node scripts/migrate.js up:force",
         "migrate:down": "cross-env NODE_ENV=development node scripts/migrate.js down",

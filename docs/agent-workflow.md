@@ -57,6 +57,24 @@ After dedupe, MemoryQ stores only genuinely new lessons and knowledge, asks Groq
 
 Agents must always run `reflect`; the model decides whether memory is worth saving. Ensure `.memoryq/last-result.md` is deleted even if reflection fails.
 
+## Seed Command
+
+For projects that want to start with a baseline of token and context optimization rules, MemoryQ provides a `seed` command:
+
+```bash
+memoryq seed caveman --format json
+```
+
+This imports a broad, self-contained catalog of Caveman-derived token and context optimization
+memory, including compression boundaries, review and commit rules, hook behavior, agent
+integrations, benchmark notes, and safety constraints. It is idempotent and can be run multiple
+times safely. The catalog is generated from Caveman during MemoryQ development, but normal seeding
+does not require the `caveman/` source directory to exist.
+
+During MemoryQ development, `npm run import:caveman-memory` rebuilds that self-contained catalog
+and then runs the same Caveman seed path. Use `npm run import:caveman-memory -- --no-seed` for a
+catalog-only rebuild.
+
 ## Using MemoryQ In Another Project
 
 Recommended setup is local package integration:

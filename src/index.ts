@@ -4,9 +4,10 @@ import { config } from "dotenv";
 import { Command, InvalidArgumentError } from "commander";
 
 import { createCliContext } from "./cli/context.js";
-import { executePlanCommand, executeReflectCommand } from "./cli/runner.js";
+import { executePlanCommand, executeReflectCommand, executeSeedCommand } from "./cli/runner.js";
 import { PlanService } from "./services/plan-service.js";
 import { ReflectService } from "./services/reflect-service.js";
+import { SeedService } from "./services/seed-service.js";
 
 config();
 
@@ -71,6 +72,21 @@ async function run(): Promise<void> {
                 process.stdout.write(`${output}\n`);
             }
         );
+
+    program
+        .command("seed")
+        .description("Seed default project memory with curated knowledge")
+        .argument("<target>", "Target dataset to seed (e.g. caveman)")
+        .option("--format <format>", "Output format: json|markdown", parseFormat, "json")
+        .action(async (target: string, options: { format: "json" | "markdown" }) => {
+            const context = createCliContext();
+            const seedService = new SeedService(context);
+            const output = await executeSeedCommand(seedService, {
+                target: target as "caveman",
+                format: options.format
+            });
+            process.stdout.write(`${output}\n`);
+        });
 
     await program.parseAsync(process.argv);
 }

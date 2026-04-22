@@ -4,3 +4,4 @@ coverage
 .memoryq
 package-lock.json
 *.sql
+caveman

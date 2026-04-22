@@ -7,6 +7,8 @@ MemoryQ is a TypeScript CLI that gives coding agents a structured long-term memo
 - `memoryq plan --prompt "..." --format json|markdown --no-artifact`
 - `memoryq reflect --run-id <id> --result "..."`
 - `memoryq reflect --run-id <id> --result-file <path>`
+- `memoryq seed caveman --format json|markdown`
+- `npm run import:caveman-memory` to rebuild the Caveman catalog and seed it into storage
 
 ## Environment Variables
 
@@ -29,7 +31,17 @@ MemoryQ is a TypeScript CLI that gives coding agents a structured long-term memo
 npm install
 npm test
 npm run memoryq -- plan --prompt "fix api-gateway route"
+npm run import:caveman-memory
 ```
+
+`npm run import:caveman-memory` rebuilds the self-contained Caveman catalog, validates coverage,
+then seeds the records into MemoryQ storage through `SeedService`. Use
+`npm run import:caveman-memory -- --no-seed` when you only want to regenerate
+`src/default-data/caveman-memory.ts` without writing storage records.
+
+`memoryq seed caveman` seeds the already-generated catalog directly. The catalog is generated from
+the Caveman repo during MemoryQ development, but runtime seeding does not require the `caveman/`
+directory to exist.
 
 ## Agent workflow
 
