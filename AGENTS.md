@@ -34,9 +34,17 @@ Read the plan output before making changes:
 
 If the task, implementation path, target file, data model, command, migration, or expected behavior is unclear, do **not** guess and do **not** continue blindly.
 
-This applies throughout the whole working session, including after implementation has started. It is valid and expected to pause mid-task and call `memoryq plan` again when new uncertainty appears.
+### Discover Specialized Skills (find-skills)
 
-Mandatory order:
+If `memoryq plan` lacks specialized domain knowledge (e.g., monorepo, specific frameworks, complex deployment) and the user has not provided guidance, use the specialized **find-skills** workflow:
+
+1.  **Read Workflow:** Consult `skills/find-skills/SKILL.md` for full instructions.
+2.  **Search:** Use `npx skills find [query]` or browse `https://skills.sh` to discover specialized agent skills.
+3.  **Verify:** Prefer reputable sources (e.g., `vercel-labs`) and high install counts.
+4.  **Install/Use:** Present the skill to the user or install if appropriate (`npx skills add`).
+5.  **Persist:** Once a skill is used effectively, you **MUST** include a compact note about it in your `memoryq reflect` step (see below) so future agents know the capability has been added to the workspace.
+
+### Mandatory Uncertainty Order:
 
 1. Re-read the `memoryq plan` output and inspect any relevant local files.
 2. If the answer is still unclear, query MemoryQ again with a focused prompt that states the ambiguity:

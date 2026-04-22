@@ -418,6 +418,42 @@ export const CAVEMAN_MEMORY_RECORDS: CavemanMemoryRecord[] = [
         conceptKey: "sync"
     },
     {
+        key: "caveman.skills.find-skills.discovery",
+        kind: "knowledge",
+        text: "Root skill: Use 'npx skills find' or skills.sh to bridge capability gaps (monorepo, frameworks, devops) when MemoryQ lacks relevant domain knowledge. Detailed workflow in caveman/skills/find-skills/SKILL.md.",
+        scope: [
+            "token-management",
+            "context-management",
+            "caveman",
+            "skills",
+            "skill-discovery",
+            "agent-integration"
+        ],
+        taskType: "general",
+        noteType: "convention",
+        confidence: 0.95,
+        parentKey: "caveman.skills",
+        conceptKey: "find-skills"
+    },
+    {
+        key: "caveman.skills.find-skills.persistence",
+        kind: "lesson",
+        text: "After using an external skill, persist a compact note via 'memoryq reflect' so future agents know it was already added and tested.",
+        scope: [
+            "token-management",
+            "context-management",
+            "caveman",
+            "skills",
+            "skill-discovery",
+            "agent-integration"
+        ],
+        taskType: "general",
+        severity: "medium",
+        confidence: 0.9,
+        parentKey: "caveman.skills",
+        conceptKey: "find-skills"
+    },
+    {
         key: "caveman.verify.scope",
         kind: "knowledge",
         text: "Verification covers compression CLI, hook flow (install/activation/cleanup), JSON manifest syntax, and synced file parity.",
